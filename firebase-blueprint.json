@@ -1,0 +1,122 @@
+{
+  "entities": {
+    "Medicine": {
+      "title": "Medicine",
+      "description": "Medicine inventory item",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Brand name of the medicine" },
+        "genericName": { "type": "string", "description": "Generic name of the medicine" },
+        "category": { "type": "string", "description": "Category (e.g., Tablet, Syrup)" },
+        "price": { "type": "number", "description": "Selling price per unit" },
+        "cost": { "type": "number", "description": "Purchase cost per unit" },
+        "stock": { "type": "number", "description": "Current stock quantity" },
+        "lowStockThreshold": { "type": "number", "description": "Threshold for low stock alert" },
+        "expiryDate": { "type": "string", "format": "date", "description": "Expiry date" },
+        "manufacturer": { "type": "string", "description": "Manufacturer name" },
+        "barcode": { "type": "string", "description": "Barcode for scanning" }
+      },
+      "required": ["name", "price", "cost", "stock"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "Sales transaction record",
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "medicineId": { "type": "string" },
+              "name": { "type": "string" },
+              "quantity": { "type": "number" },
+              "price": { "type": "number" },
+              "subtotal": { "type": "number" }
+            }
+          }
+        },
+        "totalAmount": { "type": "number" },
+        "discount": { "type": "number" },
+        "finalAmount": { "type": "number" },
+        "amountPaid": { "type": "number" },
+        "dueAmount": { "type": "number" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "paymentMethod": { "type": "string", "enum": ["Cash", "Card", "Mobile"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "sellerId": { "type": "string" }
+      },
+      "required": ["items", "totalAmount", "finalAmount", "timestamp"]
+    },
+    "CustomerPayment": {
+      "title": "CustomerPayment",
+      "description": "Record of payment received from customer to clear due",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "amount": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "method": { "type": "string" },
+        "note": { "type": "string" }
+      },
+      "required": ["customerId", "customerPhone", "amount", "timestamp"]
+    },
+    "Purchase": {
+      "title": "Purchase",
+      "description": "Inventory purchase record",
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "medicineId": { "type": "string" },
+              "quantity": { "type": "number" },
+              "cost": { "type": "number" }
+            }
+          }
+        },
+        "totalCost": { "type": "number" },
+        "supplierId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["items", "totalCost", "timestamp"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer profile",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "balance": { "type": "number", "description": "Outstanding balance" }
+      },
+      "required": ["name", "phone"]
+    },
+    "User": {
+      "title": "User",
+      "description": "System user profile",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "manager", "staff"] },
+        "uid": { "type": "string" }
+      },
+      "required": ["email", "role", "uid"]
+    }
+  },
+  "firestore": {
+    "/medicines": { "schema": "Medicine", "description": "Inventory of medicines" },
+    "/sales": { "schema": "Sale", "description": "Sales transactions" },
+    "/purchases": { "schema": "Purchase", "description": "Purchase records" },
+    "/customers": { "schema": "Customer", "description": "Customer records" },
+    "/customerPayments": { "schema": "CustomerPayment", "description": "Payments received from customers" },
+    "/users": { "schema": "User", "description": "System users" }
+  }
+}

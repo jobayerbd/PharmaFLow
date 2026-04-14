@@ -1,0 +1,203 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: medicines
+// Fields:
+//   - name: string (required)
+//   - genericName: string (optional)
+//   - category: string (optional)
+//   - price: number (required, > 0)
+//   - cost: number (required, > 0)
+//   - stock: number (required, >= 0)
+//   - lowStockThreshold: number (optional)
+//   - expiryDate: string (optional, ISO 8601)
+//   - manufacturer: string (optional)
+//   - barcode: string (optional)
+//
+// Collection: sales
+// Fields:
+//   - items: list (required)
+//   - totalAmount: number (required)
+//   - discount: number (required)
+//   - finalAmount: number (required)
+//   - customerId: string (optional)
+//   - customerName: string (optional)
+//   - paymentMethod: string (required, enum)
+//   - timestamp: timestamp (required)
+//   - sellerId: string (required)
+//
+// Collection: purchases
+// Fields:
+//   - items: list (required)
+//   - totalCost: number (required)
+//   - supplierId: string (optional)
+//   - timestamp: timestamp (required)
+//
+// Collection: customers
+// Fields:
+//   - name: string (required)
+//   - phone: string (required)
+//   - address: string (optional)
+//   - balance: number (required)
+//   - createdAt: timestamp (optional)
+//   - lastPurchase: timestamp (optional)
+//   - totalPurchases: number (optional)
+//
+// Collection: customerPayments
+// Fields:
+//   - customerId: string (required)
+//   - customerPhone: string (required)
+//   - amount: number (required, > 0)
+//   - timestamp: timestamp (required)
+//   - method: string (required)
+//   - note: string (optional)
+//
+// Collection: users
+// Fields:
+//   - name: string (required)
+//   - email: string (required)
+//   - role: string (required, enum: admin, manager, staff)
+//   - uid: string (required)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+          (request.auth.token.email == "op.jobayer@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isManager() {
+      return isAuthenticated() && 
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager') || isAdmin());
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidMedicine(data) {
+      return hasRequiredFields(['name', 'price', 'cost', 'stock']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.price is number && data.price >= 0 &&
+             data.cost is number && data.cost >= 0 &&
+             data.stock is number &&
+             (!('genericName' in data) || (data.genericName is string && data.genericName.size() < 200)) &&
+             (!('expiryDate' in data) || isValidDateString(data.expiryDate));
+    }
+
+    function isValidSale(data) {
+      return hasRequiredFields(['items', 'totalAmount', 'finalAmount', 'timestamp', 'sellerId']) &&
+             data.items is list && data.items.size() > 0 &&
+             data.totalAmount is number && data.totalAmount >= 0 &&
+             data.finalAmount is number && data.finalAmount >= 0 &&
+             data.timestamp is timestamp &&
+             data.sellerId == request.auth.uid;
+    }
+
+    function isValidCustomer(data) {
+      return hasRequiredFields(['name', 'phone']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.phone is string && data.phone.size() > 0 && data.phone.size() < 20 &&
+             (!('balance' in data) || data.balance is number);
+    }
+
+    function isValidCustomerPayment(data) {
+      return hasRequiredFields(['customerId', 'customerPhone', 'amount', 'timestamp', 'method']) &&
+             data.customerId is string &&
+             data.customerPhone is string &&
+             data.amount is number && data.amount > 0 &&
+             data.timestamp is timestamp &&
+             data.method is string;
+    }
+
+    function isValidUser(data) {
+      return hasRequiredFields(['name', 'email', 'role', 'uid']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['admin', 'manager', 'staff'] &&
+             data.uid == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role != 'admin' || isAdmin());
+      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /medicines/{medicineId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isManager() && isValidMedicine(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /sales/{saleId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidSale(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    match /purchases/{purchaseId} {
+      allow read: if isManager();
+      allow create: if isManager();
+      allow update, delete: if isAdmin();
+    }
+
+    match /customers/{customerId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidCustomer(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /customerPayments/{paymentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidCustomerPayment(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
