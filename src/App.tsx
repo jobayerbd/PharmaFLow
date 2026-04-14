@@ -85,9 +85,9 @@ import firebaseConfig from '../firebase-applet-config.json';
 const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
 const secondaryAuth = getAuth(secondaryApp);
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { Button } from '@/components/ui/button.tsx';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card.tsx';
-import { Input } from '@/components/ui/input.tsx';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { 
   Table, 
   TableBody, 
@@ -95,7 +95,7 @@ import {
   TableHead, 
   TableHeader, 
   TableRow 
-} from '@/components/ui/table.tsx';
+} from '@/components/ui/table';
 import { 
   Dialog, 
   DialogContent, 
@@ -104,17 +104,17 @@ import {
   DialogDescription,
   DialogTrigger,
   DialogFooter
-} from '@/components/ui/dialog.tsx';
+} from '@/components/ui/dialog';
 import { 
   Select, 
   SelectContent, 
   SelectItem, 
   SelectTrigger, 
   SelectValue 
-} from '@/components/ui/select.tsx';
-import { Badge } from '@/components/ui/badge.tsx';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.tsx';
-import { Label } from '@/components/ui/label.tsx';
+} from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Label } from '@/components/ui/label';
 
 // --- Types ---
 
@@ -1299,13 +1299,17 @@ export default function App() {
                                     <Edit className="w-4 h-4" />
                                   </Button>
                                 } />
-                                <DialogContent>
+                                <DialogContent key={med.id}>
                                   <DialogHeader><DialogTitle>Edit Medicine</DialogTitle></DialogHeader>
-                                  <form onSubmit={(e) => {
-                                    e.preventDefault();
-                                    const formData = new FormData(e.currentTarget);
-                                    updateMedicine(med.id, Object.fromEntries(formData));
-                                  }} className="space-y-4">
+                                  <form 
+                                    key={med.id}
+                                    onSubmit={(e) => {
+                                      e.preventDefault();
+                                      const formData = new FormData(e.currentTarget);
+                                      updateMedicine(med.id, Object.fromEntries(formData));
+                                    }} 
+                                    className="space-y-4"
+                                  >
                                     <div className="space-y-2">
                                       <Label>Name</Label>
                                       <Input name="name" defaultValue={med.name || ""} required />
