@@ -85,9 +85,9 @@ import firebaseConfig from '../firebase-applet-config.json';
 const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
 const secondaryAuth = getAuth(secondaryApp);
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Button } from './components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './components/ui/card';
+import { Input } from './components/ui/input';
 import { 
   Table, 
   TableBody, 
@@ -95,7 +95,7 @@ import {
   TableHead, 
   TableHeader, 
   TableRow 
-} from '@/components/ui/table';
+} from './components/ui/table';
 import { 
   Dialog, 
   DialogContent, 
@@ -104,17 +104,17 @@ import {
   DialogDescription,
   DialogTrigger,
   DialogFooter
-} from '@/components/ui/dialog';
+} from './components/ui/dialog';
 import { 
   Select, 
   SelectContent, 
   SelectItem, 
   SelectTrigger, 
   SelectValue 
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Label } from '@/components/ui/label';
+} from './components/ui/select';
+import { Badge } from './components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
+import { Label } from './components/ui/label';
 
 // --- Types ---
 
@@ -1308,30 +1308,30 @@ export default function App() {
                                   }} className="space-y-4">
                                     <div className="space-y-2">
                                       <Label>Name</Label>
-                                      <Input name="name" defaultValue={med.name} required />
+                                      <Input name="name" defaultValue={med.name || ""} required />
                                     </div>
                                     <div className="space-y-2">
                                       <Label>Generic Name</Label>
-                                      <Input name="genericName" defaultValue={med.genericName} />
+                                      <Input name="genericName" defaultValue={med.genericName || ""} />
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                       <div className="space-y-2">
                                         <Label>Stock</Label>
-                                        <Input name="stock" type="number" defaultValue={med.stock} required />
+                                        <Input name="stock" type="number" defaultValue={med.stock ?? 0} required />
                                       </div>
                                       <div className="space-y-2">
                                         <Label>Low Stock Threshold</Label>
-                                        <Input name="lowStockThreshold" type="number" defaultValue={med.lowStockThreshold} required />
+                                        <Input name="lowStockThreshold" type="number" defaultValue={med.lowStockThreshold ?? 10} required />
                                       </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                       <div className="space-y-2">
                                         <Label>Cost Price</Label>
-                                        <Input name="cost" type="number" step="0.01" defaultValue={med.cost} required />
+                                        <Input name="cost" type="number" step="0.01" defaultValue={med.cost ?? 0} required />
                                       </div>
                                       <div className="space-y-2">
                                         <Label>Selling Price</Label>
-                                        <Input name="price" type="number" step="0.01" defaultValue={med.price} required />
+                                        <Input name="price" type="number" step="0.01" defaultValue={med.price ?? 0} required />
                                       </div>
                                     </div>
                                     <Button type="submit" className="w-full">Update Medicine</Button>
@@ -1828,11 +1828,15 @@ export default function App() {
                         <CardDescription>Update your pharmacy details for invoices.</CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <form onSubmit={(e) => {
-                          e.preventDefault();
-                          const formData = new FormData(e.currentTarget);
-                          savePharmacyInfo(Object.fromEntries(formData));
-                        }} className="space-y-4">
+                        <form 
+                          key={pharmacyInfo ? 'loaded' : 'loading'}
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const formData = new FormData(e.currentTarget);
+                            savePharmacyInfo(Object.fromEntries(formData));
+                          }} 
+                          className="space-y-4"
+                        >
                           <div className="space-y-2">
                             <Label>Pharmacy Name</Label>
                             <Input name="name" defaultValue={pharmacyInfo?.name || "PharmaFlow"} required />
