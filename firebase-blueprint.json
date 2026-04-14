@@ -109,6 +109,19 @@
         "uid": { "type": "string" }
       },
       "required": ["email", "role", "uid"]
+    },
+    "PharmacyInfo": {
+      "title": "PharmacyInfo",
+      "description": "Pharmacy business details",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "website": { "type": "string" }
+      },
+      "required": ["name"]
     }
   },
   "firestore": {
@@ -117,6 +130,7 @@
     "/purchases": { "schema": "Purchase", "description": "Purchase records" },
     "/customers": { "schema": "Customer", "description": "Customer records" },
     "/customerPayments": { "schema": "CustomerPayment", "description": "Payments received from customers" },
-    "/users": { "schema": "User", "description": "System users" }
+    "/users": { "schema": "User", "description": "System users" },
+    "/pharmacyInfo": { "schema": "PharmacyInfo", "description": "Pharmacy business settings" }
   }
 }

@@ -60,6 +60,14 @@
 //   - role: string (required, enum: admin, manager, staff)
 //   - uid: string (required)
 //
+// Collection: pharmacyInfo
+// Fields:
+//   - name: string (required)
+//   - address: string (optional)
+//   - phone: string (optional)
+//   - email: string (optional)
+//   - website: string (optional)
+//
 // ===============================================================
 
 rules_version = '2';
@@ -151,7 +159,12 @@ service cloud.firestore {
              data.name is string && data.name.size() > 0 &&
              data.email is string && isValidEmail(data.email) &&
              data.role in ['admin', 'manager', 'staff'] &&
-             data.uid == request.auth.uid;
+             data.uid is string;
+    }
+
+    function isValidPharmacyInfo(data) {
+      return hasRequiredFields(['name']) &&
+             data.name is string && data.name.size() > 0;
     }
 
     // ===============================================================
@@ -160,9 +173,16 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role != 'admin' || isAdmin());
-      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+      allow create: if (isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role != 'admin') || 
+                   (isAdmin() && isValidUser(request.resource.data));
+      allow update: if (isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role) || 
+                   (isAdmin() && isValidUser(request.resource.data));
       allow delete: if isAdmin();
+    }
+
+    match /pharmacyInfo/{infoId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() && isValidPharmacyInfo(request.resource.data);
     }
 
     match /medicines/{medicineId} {

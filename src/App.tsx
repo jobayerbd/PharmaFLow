@@ -245,6 +245,7 @@ export default function App() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [pharmacyInfo, setPharmacyInfo] = useState<any>(null);
 
   // Sales History Filters
   const [salesFilterDate, setSalesFilterDate] = useState('');
@@ -300,8 +301,9 @@ export default function App() {
         </head>
         <body>
           <div class="header">
-            <h1>PharmaFlow</h1>
-            <p>Pharmacy Management System</p>
+            <h1>${pharmacyInfo?.name || 'PharmaFlow'}</h1>
+            ${pharmacyInfo?.address ? `<p>${pharmacyInfo.address}</p>` : '<p>Pharmacy Management System</p>'}
+            ${pharmacyInfo?.phone ? `<p>Phone: ${pharmacyInfo.phone}</p>` : ''}
           </div>
           <div class="invoice-info">
             <div>
@@ -403,6 +405,12 @@ export default function App() {
       setPurchases(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Purchase)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'purchases'));
 
+    const unsubPharmacyInfo = onSnapshot(doc(db, 'pharmacyInfo', 'main'), (snapshot) => {
+      if (snapshot.exists()) {
+        setPharmacyInfo(snapshot.data());
+      }
+    });
+
     return () => {
       unsubMedicines();
       unsubSales();
@@ -410,8 +418,18 @@ export default function App() {
       unsubUsers();
       unsubPayments();
       unsubPurchases();
+      unsubPharmacyInfo();
     };
   }, [user]);
+
+  const savePharmacyInfo = async (data: any) => {
+    try {
+      await setDoc(doc(db, 'pharmacyInfo', 'main'), data);
+      toast.success("Pharmacy information updated");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'pharmacyInfo/main');
+    }
+  };
 
   const handleLogin = async () => {
     try {
@@ -1809,20 +1827,30 @@ export default function App() {
                         <CardTitle>Pharmacy Information</CardTitle>
                         <CardDescription>Update your pharmacy details for invoices.</CardDescription>
                       </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                          <Label>Pharmacy Name</Label>
-                          <Input defaultValue="PharmaFlow" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Address</Label>
-                          <Input placeholder="123 Health St, Medical City" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Phone Number</Label>
-                          <Input placeholder="+1 234 567 890" />
-                        </div>
-                        <Button className="w-full">Save Changes</Button>
+                      <CardContent>
+                        <form onSubmit={(e) => {
+                          e.preventDefault();
+                          const formData = new FormData(e.currentTarget);
+                          savePharmacyInfo(Object.fromEntries(formData));
+                        }} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label>Pharmacy Name</Label>
+                            <Input name="name" defaultValue={pharmacyInfo?.name || "PharmaFlow"} required />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Address</Label>
+                            <Input name="address" defaultValue={pharmacyInfo?.address || ""} placeholder="123 Health St, Medical City" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Phone Number</Label>
+                            <Input name="phone" defaultValue={pharmacyInfo?.phone || ""} placeholder="+1 234 567 890" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Email (Optional)</Label>
+                            <Input name="email" type="email" defaultValue={pharmacyInfo?.email || ""} placeholder="contact@pharmaflow.com" />
+                          </div>
+                          <Button type="submit" className="w-full">Save Changes</Button>
+                        </form>
                       </CardContent>
                     </Card>
                   </div>
