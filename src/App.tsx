@@ -85,9 +85,9 @@ import firebaseConfig from '../firebase-applet-config.json';
 const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
 const secondaryAuth = getAuth(secondaryApp);
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button.tsx';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card.tsx';
+import { Input } from '@/components/ui/input.tsx';
 import { 
   Table, 
   TableBody, 
@@ -95,7 +95,7 @@ import {
   TableHead, 
   TableHeader, 
   TableRow 
-} from '@/components/ui/table';
+} from '@/components/ui/table.tsx';
 import { 
   Dialog, 
   DialogContent, 
@@ -104,17 +104,17 @@ import {
   DialogDescription,
   DialogTrigger,
   DialogFooter
-} from '@/components/ui/dialog';
+} from '@/components/ui/dialog.tsx';
 import { 
   Select, 
   SelectContent, 
   SelectItem, 
   SelectTrigger, 
   SelectValue 
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Label } from '@/components/ui/label';
+} from '@/components/ui/select.tsx';
+import { Badge } from '@/components/ui/badge.tsx';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.tsx';
+import { Label } from '@/components/ui/label.tsx';
 
 // --- Types ---
 
