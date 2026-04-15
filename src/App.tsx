@@ -37,8 +37,11 @@ import {
   Mail,
   Calculator,
   Check,
-  ChevronsUpDown
+  ChevronsUpDown,
+  Barcode,
+  Camera
 } from 'lucide-react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   collection, 
@@ -93,6 +96,13 @@ import firebaseConfig from '../firebase-applet-config.json';
 
 const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
 const secondaryAuth = getAuth(secondaryApp);
+import { 
+  Sheet, 
+  SheetContent, 
+  SheetHeader, 
+  SheetTitle, 
+  SheetTrigger 
+} from '@/components/ui/sheet';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -259,6 +269,59 @@ const SidebarItem = ({ icon: Icon, label, active, onClick }: { icon: any, label:
   </button>
 );
 
+const NavigationContent = ({ activeTab, setActiveTab, profile, user, handleLogout }: any) => (
+  <div className="flex flex-col h-full">
+    <div className="p-6 flex items-center gap-3 border-b md:hidden">
+      <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+        <ShoppingCart className="w-5 h-5 text-white" />
+      </div>
+      <h1 className="text-xl font-bold tracking-tight">PharmaFlow</h1>
+    </div>
+    
+    <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+      <SidebarItem icon={LayoutDashboard} label="Home" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+      
+      <div className="pt-4 pb-2 px-2 text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Sales</div>
+      <SidebarItem icon={ShoppingCart} label="Sell" active={activeTab === 'pos'} onClick={() => setActiveTab('pos')} />
+      <SidebarItem icon={Users} label="Contacts" active={activeTab === 'customers'} onClick={() => setActiveTab('customers')} />
+      <SidebarItem icon={CreditCard} label="Payment Accounts" active={activeTab === 'accounts'} onClick={() => setActiveTab('accounts')} />
+      <SidebarItem icon={Calculator} label="Accounting" active={activeTab === 'accounting'} onClick={() => setActiveTab('accounting')} />
+      <SidebarItem icon={FileText} label="Reports" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
+
+      <div className="pt-4 pb-2 px-2 text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Purchases & Stock</div>
+      <SidebarItem icon={Truck} label="Purchases" active={activeTab === 'purchases'} onClick={() => setActiveTab('purchases')} />
+      <SidebarItem icon={Package} label="Products" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
+      <SidebarItem icon={ArrowLeftRight} label="Stock Transfers" active={activeTab === 'transfers'} onClick={() => setActiveTab('transfers')} />
+      <SidebarItem icon={Database} label="Stock Adjustment" active={activeTab === 'adjustments'} onClick={() => setActiveTab('adjustments')} />
+      <SidebarItem icon={MinusCircle} label="Expenses" active={activeTab === 'expenses'} onClick={() => setActiveTab('expenses')} />
+
+      <div className="pt-4 pb-2 px-2 text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Settings</div>
+      {profile?.role === 'admin' && (
+        <SidebarItem icon={Users2} label="User Management" active={activeTab === 'users'} onClick={() => setActiveTab('users')} />
+      )}
+      <SidebarItem icon={Mail} label="Notification Templates" active={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} />
+      {profile?.role === 'admin' && (
+        <SidebarItem icon={Settings} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+      )}
+    </nav>
+
+    <div className="p-4 border-t space-y-4">
+      <div className="flex items-center gap-3 px-2">
+        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center overflow-hidden border">
+          {user.photoURL ? <img src={user.photoURL} alt="User" className="w-full h-full object-cover" /> : <UserIcon className="w-6 h-6 text-muted-foreground" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold truncate">{user.displayName}</p>
+          <p className="text-xs text-muted-foreground capitalize">{profile?.role || 'Staff'}</p>
+        </div>
+      </div>
+      <Button variant="ghost" className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50" onClick={handleLogout}>
+        <LogOut className="w-5 h-5 mr-3" /> Sign Out
+      </Button>
+    </div>
+  </div>
+);
+
 const StatCard = ({ title, value, icon: Icon, trend, color }: { title: string, value: string | number, icon: any, trend?: string, color: string }) => (
   <Card className="overflow-hidden border-none shadow-sm hover:shadow-md transition-shadow">
     <CardContent className="p-6">
@@ -279,6 +342,50 @@ const StatCard = ({ title, value, icon: Icon, trend, color }: { title: string, v
     </CardContent>
   </Card>
 );
+
+const BarcodeScanner = ({ onScan, onClose }: { onScan: (data: string) => void, onClose: () => void }) => {
+  useEffect(() => {
+    const scanner = new Html5QrcodeScanner(
+      "reader",
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      /* verbose= */ false
+    );
+
+    scanner.render(
+      (decodedText) => {
+        onScan(decodedText);
+        scanner.clear();
+        onClose();
+      },
+      (error) => {
+        // console.warn(error);
+      }
+    );
+
+    return () => {
+      scanner.clear().catch(error => console.error("Failed to clear scanner", error));
+    };
+  }, [onScan, onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <Card className="w-full max-w-lg overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-xl font-bold">Scan Barcode</CardTitle>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <XCircle className="h-5 w-5" />
+          </Button>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div id="reader" className="w-full overflow-hidden rounded-lg border bg-muted"></div>
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Position the barcode within the frame to scan automatically.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
 
 // --- Main App ---
 
@@ -335,6 +442,8 @@ export default function App() {
   const [lastSale, setLastSale] = useState<any | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState<{ amount: number, customerName: string } | null>(null);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [showCart, setShowCart] = useState(false);
 
   // Purchase State
   const [purchaseCart, setPurchaseCart] = useState<PurchaseItem[]>([]);
@@ -627,6 +736,19 @@ export default function App() {
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'stockAdjustments');
       return false;
+    }
+  };
+
+  const handleBarcodeScan = (barcode: string) => {
+    const med = medicines.find(m => m.barcode === barcode);
+    if (med) {
+      addToCart(med);
+      toast.success(`Added ${med.name} to cart`, {
+        icon: <CheckCircle2 className="w-5 h-5 text-green-500" />,
+        duration: 2000
+      });
+    } else {
+      toast.error(`No medicine found with barcode: ${barcode}`);
     }
   };
 
@@ -945,10 +1067,34 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
         <Toaster position="top-right" richColors />
         
-        {/* Sidebar */}
+        {/* Mobile Header */}
+        <header className="md:hidden bg-white border-b p-4 flex items-center justify-between sticky top-0 z-40">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+              <ShoppingCart className="w-5 h-5 text-white" />
+            </div>
+            <h1 className="text-lg font-bold tracking-tight">PharmaFlow</h1>
+          </div>
+          <Sheet>
+            <SheetTrigger render={<Button variant="ghost" size="icon"><Menu className="w-6 h-6" /></Button>} />
+            <SheetContent side="left" className="p-0 w-72">
+              <NavigationContent 
+                activeTab={activeTab} 
+                setActiveTab={(tab: string) => {
+                  setActiveTab(tab);
+                }} 
+                profile={profile} 
+                user={user} 
+                handleLogout={handleLogout} 
+              />
+            </SheetContent>
+          </Sheet>
+        </header>
+
+        {/* Sidebar (Desktop) */}
         <aside className="w-64 bg-white border-r hidden md:flex flex-col sticky top-0 h-screen">
           <div className="p-6 flex items-center gap-3 border-b">
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
@@ -956,42 +1102,13 @@ export default function App() {
             </div>
             <h1 className="text-xl font-bold tracking-tight">PharmaFlow</h1>
           </div>
-          
-          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-            <SidebarItem icon={LayoutDashboard} label="Home" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-            {profile?.role === 'admin' && (
-              <SidebarItem icon={Users2} label="User Management" active={activeTab === 'users'} onClick={() => setActiveTab('users')} />
-            )}
-            <SidebarItem icon={Users} label="Contacts" active={activeTab === 'customers'} onClick={() => setActiveTab('customers')} />
-            <SidebarItem icon={Package} label="Products" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
-            <SidebarItem icon={Truck} label="Purchases" active={activeTab === 'purchases'} onClick={() => setActiveTab('purchases')} />
-            <SidebarItem icon={ShoppingCart} label="Sell" active={activeTab === 'pos'} onClick={() => setActiveTab('pos')} />
-            <SidebarItem icon={ArrowLeftRight} label="Stock Transfers" active={activeTab === 'transfers'} onClick={() => setActiveTab('transfers')} />
-            <SidebarItem icon={Database} label="Stock Adjustment" active={activeTab === 'adjustments'} onClick={() => setActiveTab('adjustments')} />
-            <SidebarItem icon={MinusCircle} label="Expenses" active={activeTab === 'expenses'} onClick={() => setActiveTab('expenses')} />
-            <SidebarItem icon={CreditCard} label="Payment Accounts" active={activeTab === 'accounts'} onClick={() => setActiveTab('accounts')} />
-            <SidebarItem icon={Calculator} label="Accounting" active={activeTab === 'accounting'} onClick={() => setActiveTab('accounting')} />
-            <SidebarItem icon={FileText} label="Reports" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
-            <SidebarItem icon={Mail} label="Notification Templates" active={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} />
-            {profile?.role === 'admin' && (
-              <SidebarItem icon={Settings} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
-            )}
-          </nav>
-
-          <div className="p-4 border-t space-y-4">
-            <div className="flex items-center gap-3 px-2">
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center overflow-hidden border">
-                {user.photoURL ? <img src={user.photoURL} alt="User" className="w-full h-full object-cover" /> : <UserIcon className="w-6 h-6 text-muted-foreground" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{user.displayName}</p>
-                <p className="text-xs text-muted-foreground capitalize">{profile?.role || 'Staff'}</p>
-              </div>
-            </div>
-            <Button variant="ghost" className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50" onClick={handleLogout}>
-              <LogOut className="w-5 h-5 mr-3" /> Sign Out
-            </Button>
-          </div>
+          <NavigationContent 
+            activeTab={activeTab} 
+            setActiveTab={setActiveTab} 
+            profile={profile} 
+            user={user} 
+            handleLogout={handleLogout} 
+          />
         </aside>
 
         {/* Main Content */}
@@ -1046,28 +1163,63 @@ export default function App() {
               )}
 
               {activeTab === 'pos' && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[calc(100vh-120px)]">
-                  <div className="lg:col-span-2 flex flex-col space-y-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input placeholder="Search medicine..." className="pl-10 h-12" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                    </div>
-                    <div className="flex-1 overflow-y-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 content-start">
-                      {medicines.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase())).map(med => (
-                        <Card key={med.id} className="cursor-pointer hover:border-primary" onClick={() => addToCart(med)}>
-                          <CardContent className="p-4">
-                            <h4 className="font-bold">{med.name}</h4>
-                            <p className="text-primary font-bold">${med.price.toFixed(2)}</p>
-                            <p className="text-xs text-muted-foreground">Stock: {med.stock}</p>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
+                <div className="flex flex-col h-[calc(100vh-140px)] md:h-[calc(100vh-120px)]">
+                  {/* Mobile POS Toggle */}
+                  <div className="flex lg:hidden mb-4 bg-muted p-1 rounded-lg shrink-0">
+                    <Button 
+                      variant={!showCart ? "default" : "ghost"} 
+                      className="flex-1" 
+                      onClick={() => setShowCart(false)}
+                    >
+                      Products
+                    </Button>
+                    <Button 
+                      variant={showCart ? "default" : "ghost"} 
+                      className="flex-1 relative" 
+                      onClick={() => setShowCart(true)}
+                    >
+                      Cart
+                      {cart.length > 0 && (
+                        <Badge className="absolute -top-2 -right-2 px-2 py-0.5 min-w-[20px] h-5 flex items-center justify-center">
+                          {cart.length}
+                        </Badge>
+                      )}
+                    </Button>
                   </div>
-                  <Card className="flex flex-col shadow-lg border-none">
-                    <CardHeader className="border-b"><CardTitle>Order</CardTitle></CardHeader>
-                    <CardContent className="flex-1 overflow-y-auto p-0">
-                      <Table>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 min-h-0">
+                    <div className={cn("lg:col-span-2 flex flex-col space-y-4 min-h-0", showCart ? "hidden lg:flex" : "flex")}>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input placeholder="Search medicine..." className="pl-10 h-12" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        className="h-12 px-6 gap-2"
+                        onClick={() => setIsScannerOpen(true)}
+                      >
+                        <Barcode className="w-5 h-5" />
+                        <span className="hidden sm:inline">Scan</span>
+                      </Button>
+                    </div>
+                      <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 content-start pb-4">
+                        {medicines.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase())).map(med => (
+                          <Card key={med.id} className="cursor-pointer hover:border-primary" onClick={() => addToCart(med)}>
+                            <CardContent className="p-4">
+                              <h4 className="font-bold">{med.name}</h4>
+                              <p className="text-primary font-bold">${med.price.toFixed(2)}</p>
+                              <p className="text-xs text-muted-foreground">Stock: {med.stock}</p>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                    <Card className={cn("flex flex-col shadow-lg border-none min-h-0", !showCart ? "hidden lg:flex" : "flex")}>
+                      <CardHeader className="border-b shrink-0"><CardTitle>Order</CardTitle></CardHeader>
+                      <CardContent className="flex-1 overflow-y-auto p-0">
+                        <div className="overflow-x-auto">
+                          <Table>
                         <TableBody>
                           {cart.map(item => (
                             <TableRow key={item.medicineId}>
@@ -1103,8 +1255,9 @@ export default function App() {
                           ))}
                         </TableBody>
                       </Table>
-                    </CardContent>
-                    <div className="p-6 border-t bg-muted/30 space-y-4">
+                    </div>
+                  </CardContent>
+                      <div className="p-4 md:p-6 border-t bg-muted/30 space-y-4 shrink-0">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label className="text-xs">Customer Phone</Label>
@@ -1168,8 +1321,9 @@ export default function App() {
                       </Button>
                     </div>
                   </Card>
+                </div>
 
-                  <Dialog open={!!paymentSuccess} onOpenChange={(open) => !open && setPaymentSuccess(null)}>
+                <Dialog open={!!paymentSuccess} onOpenChange={(open) => !open && setPaymentSuccess(null)}>
                     <DialogContent className="sm:max-w-md">
                       <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
@@ -1273,7 +1427,8 @@ export default function App() {
 
                       <TabsContent value="history">
                         <Card className="p-0 border-none shadow-sm">
-                          <Table>
+                          <div className="overflow-x-auto">
+                            <Table>
                             <TableHeader>
                               <TableRow>
                                 <TableHead>Date</TableHead>
@@ -1295,8 +1450,9 @@ export default function App() {
                               ))}
                             </TableBody>
                           </Table>
-                        </Card>
-                      </TabsContent>
+                        </div>
+                      </Card>
+                    </TabsContent>
                     </Tabs>
                   </div>
 
@@ -1308,49 +1464,51 @@ export default function App() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="p-0 flex-1 overflow-y-auto max-h-[400px]">
-                      <Table>
-                        <TableBody>
-                          {purchaseCart.map(item => (
-                            <TableRow key={item.medicineId}>
-                              <TableCell className="text-sm font-medium">{item.name}</TableCell>
-                              <TableCell className="text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                  <Button 
-                                    variant="outline" 
-                                    size="icon-xs" 
-                                    className="h-6 w-6 rounded-full"
-                                    onClick={() => updatePurchaseQuantity(item.medicineId, item.quantity - 1)}
-                                  >
-                                    <Minus className="w-3 h-3" />
-                                  </Button>
-                                  <Input 
-                                    type="number" 
-                                    className="w-12 h-7 text-center text-sm font-bold p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                    value={item.quantity}
-                                    onChange={(e) => updatePurchaseQuantity(item.medicineId, parseInt(e.target.value) || 0)}
-                                  />
-                                  <Button 
-                                    variant="outline" 
-                                    size="icon-xs" 
-                                    className="h-6 w-6 rounded-full"
-                                    onClick={() => updatePurchaseQuantity(item.medicineId, item.quantity + 1)}
-                                  >
-                                    <Plus className="w-3 h-3" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right font-bold">${item.subtotal.toFixed(2)}</TableCell>
-                            </TableRow>
-                          ))}
-                          {purchaseCart.length === 0 && (
-                            <TableRow>
-                              <TableCell colSpan={3} className="text-center py-12 text-muted-foreground">
-                                Cart is empty
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableBody>
+                            {purchaseCart.map(item => (
+                              <TableRow key={item.medicineId}>
+                                <TableCell className="text-sm font-medium">{item.name}</TableCell>
+                                <TableCell className="text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <Button 
+                                      variant="outline" 
+                                      size="icon-xs" 
+                                      className="h-6 w-6 rounded-full"
+                                      onClick={() => updatePurchaseQuantity(item.medicineId, item.quantity - 1)}
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </Button>
+                                    <Input 
+                                      type="number" 
+                                      className="w-12 h-7 text-center text-sm font-bold p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      value={item.quantity}
+                                      onChange={(e) => updatePurchaseQuantity(item.medicineId, parseInt(e.target.value) || 0)}
+                                    />
+                                    <Button 
+                                      variant="outline" 
+                                      size="icon-xs" 
+                                      className="h-6 w-6 rounded-full"
+                                      onClick={() => updatePurchaseQuantity(item.medicineId, item.quantity + 1)}
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right font-bold">${item.subtotal.toFixed(2)}</TableCell>
+                              </TableRow>
+                            ))}
+                            {purchaseCart.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={3} className="text-center py-12 text-muted-foreground">
+                                  Cart is empty
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </CardContent>
                     <div className="p-6 border-t bg-muted/30 space-y-4">
                       <div className="space-y-2">
@@ -1419,6 +1577,10 @@ export default function App() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-2">
+                                <Label>Barcode</Label>
+                                <Input name="barcode" placeholder="Scan or enter barcode" />
+                              </div>
+                              <div className="space-y-2">
                                 <Label>Category</Label>
                                 <Select name="category" defaultValue="General">
                                   <SelectTrigger>
@@ -1467,16 +1629,17 @@ export default function App() {
                     </div>
                   </div>
                   <Card className="p-0 border-none shadow-sm">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead className="text-right">Stock</TableHead>
-                          <TableHead className="text-right">Price</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead className="text-right">Stock</TableHead>
+                            <TableHead className="text-right">Price</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
                       <TableBody>
                         {medicines
                           .filter(m => {
@@ -1586,11 +1749,12 @@ export default function App() {
                         ))}
                       </TableBody>
                     </Table>
-                  </Card>
-                </div>
-              )}
+                  </div>
+                </Card>
+              </div>
+            )}
 
-              {activeTab === 'sales' && (
+            {activeTab === 'sales' && (
                 <div className="space-y-6">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <h2 className="text-3xl font-bold">Sales History</h2>
@@ -1648,45 +1812,47 @@ export default function App() {
                     </div>
                   </div>
                   <Card className="p-0 border-none shadow-sm">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Seller</TableHead>
-                          <TableHead>Items</TableHead>
-                          <TableHead>Payment</TableHead>
-                          <TableHead className="text-right">Total</TableHead>
-                          <TableHead className="text-right">Print</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {sales
-                          .filter(sale => {
-                            const dateMatch = !salesFilterDate || (sale.timestamp && format(sale.timestamp.toDate(), 'yyyy-MM-dd') === salesFilterDate);
-                            const paymentMatch = salesFilterPayment === 'All' || sale.paymentMethod === salesFilterPayment;
-                            const sellerMatch = salesFilterSeller === 'All' || sale.sellerId === salesFilterSeller;
-                            return dateMatch && paymentMatch && sellerMatch;
-                          })
-                          .map(sale => (
-                          <TableRow key={sale.id}>
-                            <TableCell>{sale.timestamp ? format(sale.timestamp.toDate(), 'MMM dd, HH:mm') : '...'}</TableCell>
-                            <TableCell className="text-sm font-medium">
-                              {users.find(u => u.uid === sale.sellerId)?.name || 'Unknown'}
-                            </TableCell>
-                            <TableCell>{sale.items.length} items</TableCell>
-                            <TableCell>
-                              <Badge variant="secondary" className="text-[10px] uppercase">{sale.paymentMethod}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right font-bold">${sale.finalAmount.toFixed(2)}</TableCell>
-                            <TableCell className="text-right">
-                              <Button variant="ghost" size="icon" onClick={() => printInvoice(sale)}>
-                                <Printer className="w-4 h-4" />
-                              </Button>
-                            </TableCell>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Seller</TableHead>
+                            <TableHead>Items</TableHead>
+                            <TableHead>Payment</TableHead>
+                            <TableHead className="text-right">Total</TableHead>
+                            <TableHead className="text-right">Print</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {sales
+                            .filter(sale => {
+                              const dateMatch = !salesFilterDate || (sale.timestamp && format(sale.timestamp.toDate(), 'yyyy-MM-dd') === salesFilterDate);
+                              const paymentMatch = salesFilterPayment === 'All' || sale.paymentMethod === salesFilterPayment;
+                              const sellerMatch = salesFilterSeller === 'All' || sale.sellerId === salesFilterSeller;
+                              return dateMatch && paymentMatch && sellerMatch;
+                            })
+                            .map(sale => (
+                            <TableRow key={sale.id}>
+                              <TableCell>{sale.timestamp ? format(sale.timestamp.toDate(), 'MMM dd, HH:mm') : '...'}</TableCell>
+                              <TableCell className="text-sm font-medium">
+                                {users.find(u => u.uid === sale.sellerId)?.name || 'Unknown'}
+                              </TableCell>
+                              <TableCell>{sale.items.length} items</TableCell>
+                              <TableCell>
+                                <Badge variant="secondary" className="text-[10px] uppercase">{sale.paymentMethod}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-bold">${sale.finalAmount.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">
+                                <Button variant="ghost" size="icon" onClick={() => printInvoice(sale)}>
+                                  <Printer className="w-4 h-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </Card>
                 </div>
               )}
@@ -1773,7 +1939,8 @@ export default function App() {
                         <CardHeader>
                           <CardTitle>Transaction History</CardTitle>
                         </CardHeader>
-                        <Table>
+                        <div className="overflow-x-auto">
+                          <Table>
                           <TableHeader>
                             <TableRow>
                               <TableHead>Date</TableHead>
@@ -1814,7 +1981,8 @@ export default function App() {
                                             </DialogDescription>
                                           </DialogHeader>
                                           <div className="space-y-4">
-                                            <Table>
+                                            <div className="overflow-x-auto">
+                                              <Table>
                                               <TableHeader>
                                                 <TableRow>
                                                   <TableHead>Item</TableHead>
@@ -1834,7 +2002,8 @@ export default function App() {
                                                 ))}
                                               </TableBody>
                                             </Table>
-                                            <div className="flex justify-between items-end border-t pt-4">
+                                          </div>
+                                          <div className="flex justify-between items-end border-t pt-4">
                                               <div className="text-sm space-y-1">
                                                 <p><span className="text-muted-foreground">Payment Method:</span> {sale.paymentMethod}</p>
                                                 <p><span className="text-muted-foreground">Seller:</span> {users.find(u => u.uid === sale.sellerId)?.name || 'Unknown'}</p>
@@ -1869,13 +2038,15 @@ export default function App() {
                             )}
                           </TableBody>
                         </Table>
-                      </Card>
+                      </div>
+                    </Card>
 
                       <Card className="border-none shadow-sm">
                         <CardHeader>
                           <CardTitle>Payment History (Due Clearing)</CardTitle>
                         </CardHeader>
-                        <Table>
+                        <div className="overflow-x-auto">
+                          <Table>
                           <TableHeader>
                             <TableRow>
                               <TableHead>Date</TableHead>
@@ -1911,7 +2082,8 @@ export default function App() {
                             )}
                           </TableBody>
                         </Table>
-                      </Card>
+                      </div>
+                    </Card>
                     </div>
                   ) : (
                     <>
@@ -1958,7 +2130,8 @@ export default function App() {
                         </div>
                       </div>
                       <Card className="p-0 border-none shadow-sm">
-                        <Table>
+                        <div className="overflow-x-auto">
+                          <Table>
                           <TableHeader>
                             <TableRow>
                               <TableHead>Name</TableHead>
@@ -1989,7 +2162,8 @@ export default function App() {
                             ))}
                           </TableBody>
                         </Table>
-                      </Card>
+                      </div>
+                    </Card>
                     </>
                   )}
                 </div>
@@ -2087,16 +2261,17 @@ export default function App() {
                     </Dialog>
                   </div>
                   <Card className="p-0 border-none shadow-sm">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Medicine</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead className="text-right">Qty</TableHead>
-                          <TableHead>Reason</TableHead>
-                        </TableRow>
-                      </TableHeader>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Medicine</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead className="text-right">Qty</TableHead>
+                            <TableHead>Reason</TableHead>
+                          </TableRow>
+                        </TableHeader>
                       <TableBody>
                         {stockAdjustments.map(adj => (
                           <TableRow key={adj.id}>
@@ -2113,11 +2288,12 @@ export default function App() {
                         ))}
                       </TableBody>
                     </Table>
-                  </Card>
-                </div>
-              )}
+                  </div>
+                </Card>
+              </div>
+            )}
 
-              {activeTab === 'expenses' && (
+            {activeTab === 'expenses' && (
                 <div className="space-y-6">
                   <div className="flex justify-between items-center">
                     <h2 className="text-3xl font-bold">Expenses</h2>
@@ -2160,15 +2336,16 @@ export default function App() {
                     </Dialog>
                   </div>
                   <Card className="p-0 border-none shadow-sm">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead>Note</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                        </TableRow>
-                      </TableHeader>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>Note</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                          </TableRow>
+                        </TableHeader>
                       <TableBody>
                         {expenses.map(exp => (
                           <TableRow key={exp.id}>
@@ -2180,11 +2357,12 @@ export default function App() {
                         ))}
                       </TableBody>
                     </Table>
-                  </Card>
-                </div>
-              )}
+                  </div>
+                </Card>
+              </div>
+            )}
 
-              {activeTab === 'accounting' && (
+            {activeTab === 'accounting' && (
                 <div className="space-y-6">
                   <h2 className="text-3xl font-bold">Accounting</h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -2209,7 +2387,8 @@ export default function App() {
                   </div>
                   <Card className="border-none shadow-sm">
                     <CardHeader><CardTitle>Recent Transactions</CardTitle></CardHeader>
-                    <Table>
+                    <div className="overflow-x-auto">
+                      <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Date</TableHead>
@@ -2241,11 +2420,12 @@ export default function App() {
                         ))}
                       </TableBody>
                     </Table>
-                  </Card>
-                </div>
-              )}
+                  </div>
+                </Card>
+              </div>
+            )}
 
-              {activeTab === 'users' && profile?.role === 'admin' && (
+            {activeTab === 'users' && profile?.role === 'admin' && (
                 <div className="space-y-6">
                   <div className="flex justify-between items-center">
                     <h2 className="text-3xl font-bold">User Management</h2>
@@ -2317,7 +2497,8 @@ export default function App() {
                     </Dialog>
                   </div>
                   <Card className="border-none shadow-sm">
-                    <Table>
+                    <div className="overflow-x-auto">
+                      <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Name</TableHead>
@@ -2356,11 +2537,12 @@ export default function App() {
                         ))}
                       </TableBody>
                     </Table>
-                  </Card>
-                </div>
-              )}
+                  </div>
+                </Card>
+              </div>
+            )}
 
-              {activeTab === 'transfers' && (
+            {activeTab === 'transfers' && (
                 <div className="space-y-6">
                   <h2 className="text-3xl font-bold">Stock Transfers</h2>
                   <Card className="p-12 flex flex-col items-center justify-center text-center space-y-4 border-dashed">
@@ -2515,7 +2697,8 @@ export default function App() {
                         </Dialog>
 
                         <div className="border rounded-lg overflow-hidden">
-                          <Table>
+                          <div className="overflow-x-auto">
+                            <Table>
                             <TableHeader>
                               <TableRow>
                                 <TableHead>Name</TableHead>
@@ -2555,7 +2738,8 @@ export default function App() {
                                 </TableRow>
                               ))}
                             </TableBody>
-                          </Table>
+                            </Table>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -2601,6 +2785,12 @@ export default function App() {
             </motion.div>
           </AnimatePresence>
         </main>
+        {isScannerOpen && (
+          <BarcodeScanner 
+            onScan={handleBarcodeScan} 
+            onClose={() => setIsScannerOpen(false)} 
+          />
+        )}
       </div>
     </ErrorBoundary>
   );

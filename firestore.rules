@@ -144,6 +144,7 @@ service cloud.firestore {
              data.cost is number && data.cost >= 0 &&
              data.stock is number &&
              (!('genericName' in data) || (data.genericName is string && data.genericName.size() < 200)) &&
+             (!('barcode' in data) || (data.barcode is string && data.barcode.size() < 100)) &&
              (!('expiryDate' in data) || isValidDateString(data.expiryDate));
     }
 
