@@ -443,7 +443,6 @@ export default function App() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState<{ amount: number, customerName: string } | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [showCart, setShowCart] = useState(false);
 
   // Purchase State
   const [purchaseCart, setPurchaseCart] = useState<PurchaseItem[]>([]);
@@ -1164,31 +1163,8 @@ export default function App() {
 
               {activeTab === 'pos' && (
                 <div className="flex flex-col h-[calc(100vh-140px)] md:h-[calc(100vh-120px)]">
-                  {/* Mobile POS Toggle */}
-                  <div className="flex lg:hidden mb-4 bg-muted p-1 rounded-lg shrink-0">
-                    <Button 
-                      variant={!showCart ? "default" : "ghost"} 
-                      className="flex-1" 
-                      onClick={() => setShowCart(false)}
-                    >
-                      Products
-                    </Button>
-                    <Button 
-                      variant={showCart ? "default" : "ghost"} 
-                      className="flex-1 relative" 
-                      onClick={() => setShowCart(true)}
-                    >
-                      Cart
-                      {cart.length > 0 && (
-                        <Badge className="absolute -top-2 -right-2 px-2 py-0.5 min-w-[20px] h-5 flex items-center justify-center">
-                          {cart.length}
-                        </Badge>
-                      )}
-                    </Button>
-                  </div>
-
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 min-h-0">
-                    <div className={cn("lg:col-span-2 flex flex-col space-y-4 min-h-0", showCart ? "hidden lg:flex" : "flex")}>
+                    <div className="lg:col-span-2 flex flex-col space-y-4 min-h-0">
                     <div className="flex gap-2">
                       <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1215,7 +1191,7 @@ export default function App() {
                         ))}
                       </div>
                     </div>
-                    <Card className={cn("flex flex-col shadow-lg border-none min-h-0", !showCart ? "hidden lg:flex" : "flex")}>
+                    <Card className="flex flex-col shadow-lg border-none min-h-0">
                       <CardHeader className="border-b shrink-0"><CardTitle>Order</CardTitle></CardHeader>
                       <CardContent className="flex-1 overflow-y-auto p-0">
                         <div className="overflow-x-auto">
