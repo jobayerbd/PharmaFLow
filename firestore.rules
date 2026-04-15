@@ -68,6 +68,24 @@
 //   - email: string (optional)
 //   - website: string (optional)
 //
+// Collection: expenses
+// Fields:
+//   - category: string (required)
+//   - amount: number (required, > 0)
+//   - note: string (required)
+//   - timestamp: timestamp (required)
+//   - recordedBy: string (required)
+//
+// Collection: stockAdjustments
+// Fields:
+//   - medicineId: string (required)
+//   - medicineName: string (required)
+//   - type: string (required, addition/subtraction)
+//   - quantity: number (required, > 0)
+//   - reason: string (required)
+//   - timestamp: timestamp (required)
+//   - recordedBy: string (required)
+//
 // ===============================================================
 
 rules_version = '2';
@@ -167,6 +185,26 @@ service cloud.firestore {
              data.name is string && data.name.size() > 0;
     }
 
+    function isValidExpense(data) {
+      return hasRequiredFields(['category', 'amount', 'note', 'timestamp', 'recordedBy']) &&
+             data.category is string &&
+             data.amount is number && data.amount > 0 &&
+             data.note is string &&
+             data.timestamp is timestamp &&
+             data.recordedBy == request.auth.uid;
+    }
+
+    function isValidStockAdjustment(data) {
+      return hasRequiredFields(['medicineId', 'medicineName', 'type', 'quantity', 'reason', 'timestamp', 'recordedBy']) &&
+             data.medicineId is string &&
+             data.medicineName is string &&
+             data.type in ['addition', 'subtraction'] &&
+             data.quantity is number && data.quantity > 0 &&
+             data.reason is string &&
+             data.timestamp is timestamp &&
+             data.recordedBy == request.auth.uid;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -212,6 +250,18 @@ service cloud.firestore {
     match /customerPayments/{paymentId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidCustomerPayment(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isManager();
+      allow create: if isManager() && isValidExpense(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    match /stockAdjustments/{adjustmentId} {
+      allow read: if isManager();
+      allow create: if isManager() && isValidStockAdjustment(request.resource.data);
       allow update, delete: if isAdmin();
     }
 

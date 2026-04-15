@@ -28,7 +28,16 @@ import {
   ArrowLeft,
   Eye,
   Truck,
-  History
+  History,
+  Users2,
+  ArrowLeftRight,
+  Database,
+  MinusCircle,
+  CreditCard,
+  Mail,
+  Calculator,
+  Check,
+  ChevronsUpDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -112,6 +121,20 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
@@ -173,6 +196,15 @@ interface Purchase {
   recordedBy: string;
 }
 
+interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  address?: string;
+  balance: number;
+  createdAt: any;
+}
+
 interface CustomerPayment {
   id: string;
   customerId: string;
@@ -188,6 +220,26 @@ interface UserProfile {
   email: string;
   name: string;
   role: 'admin' | 'manager' | 'staff';
+}
+
+interface Expense {
+  id: string;
+  category: string;
+  amount: number;
+  note: string;
+  timestamp: any;
+  recordedBy: string;
+}
+
+interface StockAdjustment {
+  id: string;
+  medicineId: string;
+  medicineName: string;
+  type: 'addition' | 'subtraction';
+  quantity: number;
+  reason: string;
+  timestamp: any;
+  recordedBy: string;
 }
 
 // --- Components ---
@@ -239,13 +291,29 @@ export default function App() {
   // Data States
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [inventorySearchQuery, setInventorySearchQuery] = useState('');
+  const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low'>('all');
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [stockAdjustments, setStockAdjustments] = useState<StockAdjustment[]>([]);
   const [pharmacyInfo, setPharmacyInfo] = useState<any>(null);
+
+  // Stock Adjustment State
+  const [adjMedicineId, setAdjMedicineId] = useState("");
+  const [adjOpen, setAdjOpen] = useState(false);
+
+  // UI States for Dialogs
+  const [isAddMedicineOpen, setIsAddMedicineOpen] = useState(false);
+  const [isReceivePaymentOpen, setIsReceivePaymentOpen] = useState(false);
+  const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
+  const [isAdjustmentOpen, setIsAdjustmentOpen] = useState(false);
+  const [isExpenseOpen, setIsExpenseOpen] = useState(false);
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
 
   // Sales History Filters
   const [salesFilterDate, setSalesFilterDate] = useState('');
@@ -265,7 +333,7 @@ export default function App() {
   const [amountPaid, setAmountPaid] = useState<string>('');
   const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
   const [lastSale, setLastSale] = useState<any | null>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState<{ amount: number, customerName: string } | null>(null);
 
   // Purchase State
@@ -405,6 +473,14 @@ export default function App() {
       setPurchases(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Purchase)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'purchases'));
 
+    const unsubExpenses = onSnapshot(query(collection(db, 'expenses'), orderBy('timestamp', 'desc'), limit(100)), (snapshot) => {
+      setExpenses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Expense)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'expenses'));
+
+    const unsubStockAdjustments = onSnapshot(query(collection(db, 'stockAdjustments'), orderBy('timestamp', 'desc'), limit(100)), (snapshot) => {
+      setStockAdjustments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StockAdjustment)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'stockAdjustments'));
+
     const unsubPharmacyInfo = onSnapshot(doc(db, 'pharmacyInfo', 'main'), (snapshot) => {
       if (snapshot.exists()) {
         setPharmacyInfo(snapshot.data());
@@ -418,6 +494,8 @@ export default function App() {
       unsubUsers();
       unsubPayments();
       unsubPurchases();
+      unsubExpenses();
+      unsubStockAdjustments();
       unsubPharmacyInfo();
     };
   }, [user]);
@@ -470,8 +548,10 @@ export default function App() {
         lowStockThreshold: Number(data.lowStockThreshold) || 10
       });
       toast.success("Medicine added successfully");
+      return true;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'medicines');
+      return false;
     }
   };
 
@@ -498,6 +578,55 @@ export default function App() {
       setEditingMedicine(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `medicines/${id}`);
+    }
+  };
+
+  const addExpense = async (data: any) => {
+    try {
+      await addDoc(collection(db, 'expenses'), {
+        ...data,
+        amount: Number(data.amount),
+        timestamp: serverTimestamp(),
+        recordedBy: user?.uid
+      });
+      toast.success("Expense recorded");
+      return true;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'expenses');
+      return false;
+    }
+  };
+
+  const adjustStock = async (data: any) => {
+    try {
+      const med = medicines.find(m => m.id === data.medicineId);
+      if (!med) return false;
+
+      const qty = Number(data.quantity);
+      const newStock = data.type === 'addition' ? med.stock + qty : med.stock - qty;
+
+      if (newStock < 0) {
+        toast.error("Stock cannot be negative");
+        return false;
+      }
+
+      await addDoc(collection(db, 'stockAdjustments'), {
+        ...data,
+        medicineName: med.name,
+        quantity: qty,
+        timestamp: serverTimestamp(),
+        recordedBy: user?.uid
+      });
+
+      await updateDoc(doc(db, 'medicines', med.id), {
+        stock: newStock
+      });
+
+      toast.success("Stock adjusted successfully");
+      return true;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'stockAdjustments');
+      return false;
     }
   };
 
@@ -829,13 +958,21 @@ export default function App() {
           </div>
           
           <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-            <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-            <SidebarItem icon={ShoppingCart} label="POS / Billing" active={activeTab === 'pos'} onClick={() => setActiveTab('pos')} />
+            <SidebarItem icon={LayoutDashboard} label="Home" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+            {profile?.role === 'admin' && (
+              <SidebarItem icon={Users2} label="User Management" active={activeTab === 'users'} onClick={() => setActiveTab('users')} />
+            )}
+            <SidebarItem icon={Users} label="Contacts" active={activeTab === 'customers'} onClick={() => setActiveTab('customers')} />
+            <SidebarItem icon={Package} label="Products" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
             <SidebarItem icon={Truck} label="Purchases" active={activeTab === 'purchases'} onClick={() => setActiveTab('purchases')} />
-            <SidebarItem icon={Package} label="Inventory" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
-            <SidebarItem icon={TrendingUp} label="Sales History" active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} />
-            <SidebarItem icon={Users} label="Customers" active={activeTab === 'customers'} onClick={() => setActiveTab('customers')} />
+            <SidebarItem icon={ShoppingCart} label="Sell" active={activeTab === 'pos'} onClick={() => setActiveTab('pos')} />
+            <SidebarItem icon={ArrowLeftRight} label="Stock Transfers" active={activeTab === 'transfers'} onClick={() => setActiveTab('transfers')} />
+            <SidebarItem icon={Database} label="Stock Adjustment" active={activeTab === 'adjustments'} onClick={() => setActiveTab('adjustments')} />
+            <SidebarItem icon={MinusCircle} label="Expenses" active={activeTab === 'expenses'} onClick={() => setActiveTab('expenses')} />
+            <SidebarItem icon={CreditCard} label="Payment Accounts" active={activeTab === 'accounts'} onClick={() => setActiveTab('accounts')} />
+            <SidebarItem icon={Calculator} label="Accounting" active={activeTab === 'accounting'} onClick={() => setActiveTab('accounting')} />
             <SidebarItem icon={FileText} label="Reports" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
+            <SidebarItem icon={Mail} label="Notification Templates" active={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} />
             {profile?.role === 'admin' && (
               <SidebarItem icon={Settings} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
             )}
@@ -1251,21 +1388,79 @@ export default function App() {
                           onChange={(e) => setInventorySearchQuery(e.target.value)} 
                         />
                       </div>
-                      <Dialog>
-                        <DialogTrigger render={<Button><Plus className="w-4 h-4 mr-2" /> Add Medicine</Button>} />
+                      <Select value={inventoryFilter} onValueChange={(v: any) => setInventoryFilter(v)}>
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue placeholder="Filter" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Items</SelectItem>
+                          <SelectItem value="low">Low Stock</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Dialog open={isAddMedicineOpen} onOpenChange={setIsAddMedicineOpen}>
+                        <DialogTrigger render={<Button onClick={() => setIsAddMedicineOpen(true)}><Plus className="w-4 h-4 mr-2" /> Add Medicine</Button>} />
                         <DialogContent>
                           <DialogHeader><DialogTitle>New Medicine</DialogTitle></DialogHeader>
-                          <form onSubmit={(e) => {
+                          <form onSubmit={async (e) => {
                             e.preventDefault();
                             const formData = new FormData(e.currentTarget);
-                            addMedicine(Object.fromEntries(formData));
+                            const success = await addMedicine(Object.fromEntries(formData));
+                            if (success) setIsAddMedicineOpen(false);
                           }} className="space-y-4">
-                            <Input name="name" placeholder="Name" required />
-                            <Input name="genericName" placeholder="Generic Name" />
-                            <Input name="stock" type="number" placeholder="Stock" required />
-                            <Input name="cost" type="number" step="0.01" placeholder="Cost" required />
-                            <Input name="price" type="number" step="0.01" placeholder="Price" required />
-                            <Button type="submit" className="w-full">Save</Button>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Name</Label>
+                                <Input name="name" placeholder="Medicine Name" required />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Generic Name</Label>
+                                <Input name="genericName" placeholder="Generic Name" />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Category</Label>
+                                <Select name="category" defaultValue="General">
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Category" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="General">General</SelectItem>
+                                    <SelectItem value="Antibiotics">Antibiotics</SelectItem>
+                                    <SelectItem value="Painkillers">Painkillers</SelectItem>
+                                    <SelectItem value="Vitamins">Vitamins</SelectItem>
+                                    <SelectItem value="Syrup">Syrup</SelectItem>
+                                    <SelectItem value="Tablets">Tablets</SelectItem>
+                                    <SelectItem value="Injections">Injections</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Manufacturer</Label>
+                                <Input name="manufacturer" placeholder="Manufacturer" />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Stock</Label>
+                                <Input name="stock" type="number" placeholder="Stock" required />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Low Stock Threshold</Label>
+                                <Input name="lowStockThreshold" type="number" defaultValue={10} required />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Cost Price</Label>
+                                <Input name="cost" type="number" step="0.01" placeholder="Cost" required />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Selling Price</Label>
+                                <Input name="price" type="number" step="0.01" placeholder="Price" required />
+                              </div>
+                            </div>
+                            <Button type="submit" className="w-full">Save Medicine</Button>
                           </form>
                         </DialogContent>
                       </Dialog>
@@ -1276,6 +1471,7 @@ export default function App() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Name</TableHead>
+                          <TableHead>Category</TableHead>
                           <TableHead className="text-right">Stock</TableHead>
                           <TableHead className="text-right">Price</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
@@ -1283,15 +1479,32 @@ export default function App() {
                       </TableHeader>
                       <TableBody>
                         {medicines
-                          .filter(m => 
-                            m.name.toLowerCase().includes(inventorySearchQuery.toLowerCase()) || 
-                            m.genericName?.toLowerCase().includes(inventorySearchQuery.toLowerCase())
-                          )
+                          .filter(m => {
+                            const matchesSearch = m.name.toLowerCase().includes(inventorySearchQuery.toLowerCase()) || 
+                                                m.genericName?.toLowerCase().includes(inventorySearchQuery.toLowerCase());
+                            const matchesFilter = inventoryFilter === 'all' || m.stock <= (m.lowStockThreshold || 10);
+                            return matchesSearch && matchesFilter;
+                          })
                           .map(med => (
                           <TableRow key={med.id}>
-                            <TableCell>{med.name}</TableCell>
-                            <TableCell className="text-right">{med.stock}</TableCell>
-                            <TableCell className="text-right">${med.price.toFixed(2)}</TableCell>
+                            <TableCell>
+                              <div className="font-medium">{med.name}</div>
+                              <div className="text-xs text-muted-foreground">{med.genericName}</div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary" className="font-normal">{med.category || 'General'}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex flex-col items-end">
+                                <span className={med.stock <= (med.lowStockThreshold || 10) ? 'text-red-600 font-bold' : ''}>
+                                  {med.stock}
+                                </span>
+                                {med.stock <= (med.lowStockThreshold || 10) && (
+                                  <span className="text-[10px] text-red-500 uppercase font-bold">Low Stock</span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-medium">${med.price.toFixed(2)}</TableCell>
                             <TableCell className="text-right space-x-2">
                               <Dialog open={!!editingMedicine && editingMedicine.id === med.id} onOpenChange={(open) => !open && setEditingMedicine(null)}>
                                 <DialogTrigger render={
@@ -1310,13 +1523,38 @@ export default function App() {
                                     }} 
                                     className="space-y-4"
                                   >
-                                    <div className="space-y-2">
-                                      <Label>Name</Label>
-                                      <Input name="name" defaultValue={med.name || ""} required />
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <div className="space-y-2">
+                                        <Label>Name</Label>
+                                        <Input name="name" defaultValue={med.name || ""} required />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label>Generic Name</Label>
+                                        <Input name="genericName" defaultValue={med.genericName || ""} />
+                                      </div>
                                     </div>
-                                    <div className="space-y-2">
-                                      <Label>Generic Name</Label>
-                                      <Input name="genericName" defaultValue={med.genericName || ""} />
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <div className="space-y-2">
+                                        <Label>Category</Label>
+                                        <Select name="category" defaultValue={med.category || "General"}>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="Category" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="General">General</SelectItem>
+                                            <SelectItem value="Antibiotics">Antibiotics</SelectItem>
+                                            <SelectItem value="Painkillers">Painkillers</SelectItem>
+                                            <SelectItem value="Vitamins">Vitamins</SelectItem>
+                                            <SelectItem value="Syrup">Syrup</SelectItem>
+                                            <SelectItem value="Tablets">Tablets</SelectItem>
+                                            <SelectItem value="Injections">Injections</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label>Manufacturer</Label>
+                                        <Input name="manufacturer" defaultValue={med.manufacturer || ""} placeholder="Manufacturer" />
+                                      </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                       <div className="space-y-2">
@@ -1470,8 +1708,8 @@ export default function App() {
                             Balance: ${selectedCustomer.balance?.toFixed(2) || '0.00'}
                           </Badge>
                           {selectedCustomer.balance > 0 && (
-                            <Dialog>
-                              <DialogTrigger render={<Button variant="outline" size="sm">Receive Payment</Button>} />
+                            <Dialog open={isReceivePaymentOpen} onOpenChange={setIsReceivePaymentOpen}>
+                              <DialogTrigger render={<Button variant="outline" size="sm" onClick={() => setIsReceivePaymentOpen(true)}>Receive Payment</Button>} />
                               <DialogContent>
                                 <DialogHeader><DialogTitle>Receive Payment</DialogTitle></DialogHeader>
                                 <form onSubmit={async (e) => {
@@ -1496,6 +1734,7 @@ export default function App() {
                                     setPaymentSuccess({ amount, customerName: selectedCustomer.name });
                                     toast.success("Payment received successfully");
                                     setSelectedCustomer(prev => ({ ...prev, balance: Math.max(0, prev.balance - amount) }));
+                                    setIsReceivePaymentOpen(false);
                                   } catch (err) {
                                     handleFirestoreError(err, OperationType.UPDATE, 'customers');
                                   }
@@ -1560,9 +1799,64 @@ export default function App() {
                                     ${(sale.dueAmount || 0).toFixed(2)}
                                   </TableCell>
                                   <TableCell className="text-right">
-                                    <Button variant="ghost" size="icon" onClick={() => printInvoice(sale)}>
-                                      <Printer className="w-4 h-4" />
-                                    </Button>
+                                    <div className="flex justify-end gap-2">
+                                      <Dialog>
+                                        <DialogTrigger render={
+                                          <Button variant="ghost" size="icon">
+                                            <Eye className="w-4 h-4" />
+                                          </Button>
+                                        } />
+                                        <DialogContent className="max-w-2xl">
+                                          <DialogHeader>
+                                            <DialogTitle>Sale Details - {sale.id}</DialogTitle>
+                                            <DialogDescription>
+                                              {sale.timestamp ? format(sale.timestamp.toDate(), 'PPP p') : '...'}
+                                            </DialogDescription>
+                                          </DialogHeader>
+                                          <div className="space-y-4">
+                                            <Table>
+                                              <TableHeader>
+                                                <TableRow>
+                                                  <TableHead>Item</TableHead>
+                                                  <TableHead className="text-center">Qty</TableHead>
+                                                  <TableHead className="text-right">Price</TableHead>
+                                                  <TableHead className="text-right">Total</TableHead>
+                                                </TableRow>
+                                              </TableHeader>
+                                              <TableBody>
+                                                {sale.items.map((item: any, idx: number) => (
+                                                  <TableRow key={idx}>
+                                                    <TableCell>{item.name}</TableCell>
+                                                    <TableCell className="text-center">{item.quantity}</TableCell>
+                                                    <TableCell className="text-right">${item.price.toFixed(2)}</TableCell>
+                                                    <TableCell className="text-right">${item.subtotal.toFixed(2)}</TableCell>
+                                                  </TableRow>
+                                                ))}
+                                              </TableBody>
+                                            </Table>
+                                            <div className="flex justify-between items-end border-t pt-4">
+                                              <div className="text-sm space-y-1">
+                                                <p><span className="text-muted-foreground">Payment Method:</span> {sale.paymentMethod}</p>
+                                                <p><span className="text-muted-foreground">Seller:</span> {users.find(u => u.uid === sale.sellerId)?.name || 'Unknown'}</p>
+                                              </div>
+                                              <div className="text-right space-y-1">
+                                                <p className="text-sm"><span className="text-muted-foreground">Subtotal:</span> ${sale.totalAmount.toFixed(2)}</p>
+                                                <p className="text-sm"><span className="text-muted-foreground">Discount:</span> -${sale.discount.toFixed(2)}</p>
+                                                <p className="text-xl font-bold text-primary">Total: ${sale.finalAmount.toFixed(2)}</p>
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <DialogFooter>
+                                            <Button variant="outline" onClick={() => printInvoice(sale)}>
+                                              <Printer className="w-4 h-4 mr-2" /> Print Invoice
+                                            </Button>
+                                          </DialogFooter>
+                                        </DialogContent>
+                                      </Dialog>
+                                      <Button variant="ghost" size="icon" onClick={() => printInvoice(sale)}>
+                                        <Printer className="w-4 h-4" />
+                                      </Button>
+                                    </div>
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -1621,35 +1915,47 @@ export default function App() {
                     </div>
                   ) : (
                     <>
-                      <div className="flex justify-between items-center">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <h2 className="text-3xl font-bold">Customer Management</h2>
-                        <Dialog>
-                          <DialogTrigger render={<Button><Plus className="w-4 h-4 mr-2" /> Add Customer</Button>} />
-                          <DialogContent>
-                            <DialogHeader><DialogTitle>New Customer</DialogTitle></DialogHeader>
-                            <form onSubmit={async (e) => {
-                              e.preventDefault();
-                              const formData = new FormData(e.currentTarget);
-                              try {
-                                await addDoc(collection(db, 'customers'), {
-                                  name: formData.get('name'),
-                                  phone: formData.get('phone'),
-                                  address: formData.get('address'),
-                                  balance: 0,
-                                  createdAt: serverTimestamp()
-                                });
-                                toast.success("Customer added");
-                              } catch (err) {
-                                handleFirestoreError(err, OperationType.CREATE, 'customers');
-                              }
-                            }} className="space-y-4">
-                              <Input name="name" placeholder="Customer Name" required />
-                              <Input name="phone" placeholder="Phone Number" required />
-                              <Input name="address" placeholder="Address" />
-                              <Button type="submit" className="w-full">Save Customer</Button>
-                            </form>
-                          </DialogContent>
-                        </Dialog>
+                        <div className="flex items-center gap-4 w-full md:w-auto">
+                          <div className="relative flex-1 md:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input 
+                              placeholder="Search customers..." 
+                              className="pl-10" 
+                              value={customerSearchQuery} 
+                              onChange={(e) => setCustomerSearchQuery(e.target.value)} 
+                            />
+                          </div>
+                          <Dialog open={isAddCustomerOpen} onOpenChange={setIsAddCustomerOpen}>
+                            <DialogTrigger render={<Button onClick={() => setIsAddCustomerOpen(true)}><Plus className="w-4 h-4 mr-2" /> Add Customer</Button>} />
+                            <DialogContent>
+                              <DialogHeader><DialogTitle>New Customer</DialogTitle></DialogHeader>
+                              <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                const formData = new FormData(e.currentTarget);
+                                try {
+                                  await addDoc(collection(db, 'customers'), {
+                                    name: formData.get('name'),
+                                    phone: formData.get('phone'),
+                                    address: formData.get('address'),
+                                    balance: 0,
+                                    createdAt: serverTimestamp()
+                                  });
+                                  toast.success("Customer added");
+                                  setIsAddCustomerOpen(false);
+                                } catch (err) {
+                                  handleFirestoreError(err, OperationType.CREATE, 'customers');
+                                }
+                              }} className="space-y-4">
+                                <Input name="name" placeholder="Customer Name" required />
+                                <Input name="phone" placeholder="Phone Number" required />
+                                <Input name="address" placeholder="Address" />
+                                <Button type="submit" className="w-full">Save Customer</Button>
+                              </form>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
                       </div>
                       <Card className="p-0 border-none shadow-sm">
                         <Table>
@@ -1657,17 +1963,20 @@ export default function App() {
                             <TableRow>
                               <TableHead>Name</TableHead>
                               <TableHead>Phone</TableHead>
-                              <TableHead>Address</TableHead>
                               <TableHead className="text-right">Balance</TableHead>
                               <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {customers.map(customer => (
+                            {customers
+                              .filter(c => 
+                                c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) || 
+                                c.phone.includes(customerSearchQuery)
+                              )
+                              .map(customer => (
                               <TableRow key={customer.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedCustomer(customer)}>
                                 <TableCell className="font-medium">{customer.name}</TableCell>
                                 <TableCell>{customer.phone}</TableCell>
-                                <TableCell>{customer.address || 'N/A'}</TableCell>
                                 <TableCell className={`text-right font-bold ${customer.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
                                   ${customer.balance?.toFixed(2) || '0.00'}
                                 </TableCell>
@@ -1683,6 +1992,425 @@ export default function App() {
                       </Card>
                     </>
                   )}
+                </div>
+              )}
+
+              {activeTab === 'adjustments' && (
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-3xl font-bold">Stock Adjustments</h2>
+                    <Dialog open={isAdjustmentOpen} onOpenChange={setIsAdjustmentOpen}>
+                      <DialogTrigger render={<Button onClick={() => setIsAdjustmentOpen(true)}><Plus className="w-4 h-4 mr-2" /> New Adjustment</Button>} />
+                      <DialogContent>
+                        <DialogHeader><DialogTitle>Adjust Stock</DialogTitle></DialogHeader>
+                        <form onSubmit={async (e) => {
+                          e.preventDefault();
+                          const formData = new FormData(e.currentTarget);
+                          const data = Object.fromEntries(formData);
+                          const success = await adjustStock({ ...data, medicineId: adjMedicineId });
+                          if (success) {
+                            setAdjMedicineId("");
+                            setIsAdjustmentOpen(false);
+                          }
+                        }} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label>Medicine</Label>
+                            <Popover open={adjOpen} onOpenChange={setAdjOpen}>
+                              <PopoverTrigger render={
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  aria-expanded={adjOpen}
+                                  className="w-full justify-between"
+                                >
+                                  {adjMedicineId
+                                    ? medicines.find((m) => m.id === adjMedicineId)?.name
+                                    : "Select medicine..."}
+                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                              } />
+                              <PopoverContent className="w-[400px] p-0">
+                                <Command>
+                                  <CommandInput placeholder="Search medicine..." />
+                                  <CommandList>
+                                    <CommandEmpty>No medicine found.</CommandEmpty>
+                                    <CommandGroup>
+                                      {medicines.map((m) => (
+                                        <CommandItem
+                                          key={m.id}
+                                          value={m.name}
+                                          onSelect={() => {
+                                            setAdjMedicineId(m.id);
+                                            setAdjOpen(false);
+                                          }}
+                                        >
+                                          <Check
+                                            className={cn(
+                                              "mr-2 h-4 w-4",
+                                              adjMedicineId === m.id ? "opacity-100" : "opacity-0"
+                                            )}
+                                          />
+                                          {m.name} (Stock: {m.stock})
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Type</Label>
+                              <Select name="type" defaultValue="addition">
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="addition">Addition (+)</SelectItem>
+                                  <SelectItem value="subtraction">Subtraction (-)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Quantity</Label>
+                              <Input name="quantity" type="number" min="1" required />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Reason</Label>
+                            <Input name="reason" placeholder="e.g., Damage, Correction, Return" required />
+                          </div>
+                          <Button type="submit" className="w-full">Confirm Adjustment</Button>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                  <Card className="p-0 border-none shadow-sm">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Medicine</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead className="text-right">Qty</TableHead>
+                          <TableHead>Reason</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {stockAdjustments.map(adj => (
+                          <TableRow key={adj.id}>
+                            <TableCell className="text-sm">{adj.timestamp ? format(adj.timestamp.toDate(), 'MMM dd, HH:mm') : '...'}</TableCell>
+                            <TableCell className="font-medium">{adj.medicineName}</TableCell>
+                            <TableCell>
+                              <Badge variant={adj.type === 'addition' ? 'default' : 'destructive'} className="text-[10px] uppercase">
+                                {adj.type}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-bold">{adj.type === 'addition' ? '+' : '-'}{adj.quantity}</TableCell>
+                            <TableCell className="text-muted-foreground text-sm">{adj.reason}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Card>
+                </div>
+              )}
+
+              {activeTab === 'expenses' && (
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-3xl font-bold">Expenses</h2>
+                    <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
+                      <DialogTrigger render={<Button onClick={() => setIsExpenseOpen(true)}><Plus className="w-4 h-4 mr-2" /> Record Expense</Button>} />
+                      <DialogContent>
+                        <DialogHeader><DialogTitle>New Expense</DialogTitle></DialogHeader>
+                        <form onSubmit={async (e) => {
+                          e.preventDefault();
+                          const formData = new FormData(e.currentTarget);
+                          const success = await addExpense(Object.fromEntries(formData));
+                          if (success) setIsExpenseOpen(false);
+                        }} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label>Category</Label>
+                            <Select name="category" defaultValue="Utility">
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Rent">Rent</SelectItem>
+                                <SelectItem value="Utility">Utility</SelectItem>
+                                <SelectItem value="Salary">Salary</SelectItem>
+                                <SelectItem value="Maintenance">Maintenance</SelectItem>
+                                <SelectItem value="Other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Amount</Label>
+                            <Input name="amount" type="number" step="0.01" required />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Note</Label>
+                            <Input name="note" placeholder="Description of expense" required />
+                          </div>
+                          <Button type="submit" className="w-full">Save Expense</Button>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                  <Card className="p-0 border-none shadow-sm">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Note</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {expenses.map(exp => (
+                          <TableRow key={exp.id}>
+                            <TableCell className="text-sm">{exp.timestamp ? format(exp.timestamp.toDate(), 'MMM dd, HH:mm') : '...'}</TableCell>
+                            <TableCell><Badge variant="outline">{exp.category}</Badge></TableCell>
+                            <TableCell className="text-sm">{exp.note}</TableCell>
+                            <TableCell className="text-right font-bold text-red-600">-${exp.amount.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Card>
+                </div>
+              )}
+
+              {activeTab === 'accounting' && (
+                <div className="space-y-6">
+                  <h2 className="text-3xl font-bold">Accounting</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <Card className="p-6 bg-green-50 border-green-100">
+                      <p className="text-sm text-green-600 font-medium">Total Revenue</p>
+                      <p className="text-3xl font-bold text-green-700">
+                        ${sales.reduce((sum, s) => sum + s.finalAmount, 0).toFixed(2)}
+                      </p>
+                    </Card>
+                    <Card className="p-6 bg-red-50 border-red-100">
+                      <p className="text-sm text-red-600 font-medium">Total Expenses</p>
+                      <p className="text-3xl font-bold text-red-700">
+                        ${expenses.reduce((sum, e) => sum + e.amount, 0).toFixed(2)}
+                      </p>
+                    </Card>
+                    <Card className="p-6 bg-blue-50 border-blue-100">
+                      <p className="text-sm text-blue-600 font-medium">Net Profit</p>
+                      <p className="text-3xl font-bold text-blue-700">
+                        ${(sales.reduce((sum, s) => sum + s.finalAmount, 0) - expenses.reduce((sum, e) => sum + e.amount, 0)).toFixed(2)}
+                      </p>
+                    </Card>
+                  </div>
+                  <Card className="border-none shadow-sm">
+                    <CardHeader><CardTitle>Recent Transactions</CardTitle></CardHeader>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {[
+                          ...sales.map(s => ({ ...s, type: 'Income', desc: `Sale #${s.id.slice(-4)}` })),
+                          ...expenses.map(e => ({ ...e, type: 'Expense', desc: e.note, finalAmount: -e.amount }))
+                        ]
+                        .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0))
+                        .slice(0, 20)
+                        .map((t, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="text-sm">{t.timestamp ? format(t.timestamp.toDate(), 'MMM dd, HH:mm') : '...'}</TableCell>
+                            <TableCell>
+                              <Badge variant={t.type === 'Income' ? 'default' : 'destructive'} className="text-[10px] uppercase">
+                                {t.type}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">{t.desc}</TableCell>
+                            <TableCell className={`text-right font-bold ${t.type === 'Income' ? 'text-green-600' : 'text-red-600'}`}>
+                              {t.type === 'Income' ? '+' : ''}${t.finalAmount.toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Card>
+                </div>
+              )}
+
+              {activeTab === 'users' && profile?.role === 'admin' && (
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-3xl font-bold">User Management</h2>
+                    <Dialog open={isAddUserOpen} onOpenChange={setIsAddUserOpen}>
+                      <DialogTrigger render={<Button onClick={() => setIsAddUserOpen(true)}><Plus className="w-4 h-4 mr-2" /> Add New User</Button>} />
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Add New Staff Member</DialogTitle>
+                          <DialogDescription>Create a new account with email and password.</DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={async (e) => {
+                          e.preventDefault();
+                          const formData = new FormData(e.currentTarget);
+                          const email = formData.get('email') as string;
+                          const password = formData.get('password') as string;
+                          const name = formData.get('name') as string;
+                          const role = formData.get('role') as 'manager' | 'staff';
+
+                          try {
+                            const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+                            const newUser = userCredential.user;
+
+                            await setDoc(doc(db, 'users', newUser.uid), {
+                              uid: newUser.uid,
+                              email,
+                              name,
+                              role
+                            });
+
+                            await secondaryAuth.signOut();
+                            toast.success("Staff member added successfully");
+                            setIsAddUserOpen(false);
+                          } catch (error: any) {
+                            if (error.code === 'auth/operation-not-allowed') {
+                              toast.error("Email/Password authentication is not enabled in your Firebase Console. Please enable it under Build > Authentication > Sign-in method.");
+                            } else {
+                              toast.error(error.message || "Failed to add staff");
+                            }
+                            console.error("Staff creation error:", error);
+                          }
+                        }} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label>Full Name</Label>
+                            <Input name="name" placeholder="John Doe" required />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Email Address</Label>
+                            <Input name="email" type="email" placeholder="john@example.com" required />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Password</Label>
+                            <Input name="password" type="password" placeholder="Min 6 characters" required minLength={6} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Role</Label>
+                            <Select name="role" defaultValue="staff">
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="manager">Manager</SelectItem>
+                                <SelectItem value="staff">Staff</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button type="submit" className="w-full">Create Account</Button>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                  <Card className="border-none shadow-sm">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {users.map(u => (
+                          <TableRow key={u.uid}>
+                            <TableCell className="font-medium">{u.name}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
+                            <TableCell>
+                              <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="capitalize">
+                                {u.role}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {u.uid !== user?.uid && (
+                                <Button variant="ghost" size="icon" className="text-red-600" onClick={async () => {
+                                  if (confirm(`Are you sure you want to remove ${u.name}?`)) {
+                                    try {
+                                      await deleteDoc(doc(db, 'users', u.uid));
+                                      toast.success("User removed");
+                                    } catch (err) {
+                                      handleFirestoreError(err, OperationType.DELETE, `users/${u.uid}`);
+                                    }
+                                  }
+                                }}>
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Card>
+                </div>
+              )}
+
+              {activeTab === 'transfers' && (
+                <div className="space-y-6">
+                  <h2 className="text-3xl font-bold">Stock Transfers</h2>
+                  <Card className="p-12 flex flex-col items-center justify-center text-center space-y-4 border-dashed">
+                    <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center">
+                      <ArrowLeftRight className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-semibold">Stock Transfer Feature</h3>
+                      <p className="text-muted-foreground max-w-md">
+                        This feature allows you to transfer stock between different pharmacy branches or warehouses. 
+                        It is currently in development.
+                      </p>
+                    </div>
+                  </Card>
+                </div>
+              )}
+
+              {activeTab === 'notifications' && (
+                <div className="space-y-6">
+                  <h2 className="text-3xl font-bold">Notification Templates</h2>
+                  <Card className="p-12 flex flex-col items-center justify-center text-center space-y-4 border-dashed">
+                    <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center">
+                      <Mail className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-semibold">Notification Templates</h3>
+                      <p className="text-muted-foreground max-w-md">
+                        Manage SMS and Email templates for low stock alerts, customer reminders, and invoices.
+                        This feature is currently in development.
+                      </p>
+                    </div>
+                  </Card>
+                </div>
+              )}
+
+              {activeTab === 'accounts' && (
+                <div className="space-y-6">
+                  <h2 className="text-3xl font-bold">Payment Accounts</h2>
+                  <Card className="p-12 flex flex-col items-center justify-center text-center space-y-4 border-dashed">
+                    <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center">
+                      <CreditCard className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-semibold">Payment Accounts</h3>
+                      <p className="text-muted-foreground max-w-md">
+                        Manage your bank accounts, mobile banking (bKash, Nagad), and cash drawers.
+                        This feature is currently in development.
+                      </p>
+                    </div>
+                  </Card>
                 </div>
               )}
 
@@ -1716,8 +2444,8 @@ export default function App() {
                         <CardDescription>Add and manage your pharmacy staff accounts.</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-6">
-                        <Dialog>
-                          <DialogTrigger render={<Button className="w-full"><Plus className="w-4 h-4 mr-2" /> Add New Staff</Button>} />
+                        <Dialog open={isAddUserOpen} onOpenChange={setIsAddUserOpen}>
+                          <DialogTrigger render={<Button className="w-full" onClick={() => setIsAddUserOpen(true)}><Plus className="w-4 h-4 mr-2" /> Add New Staff</Button>} />
                           <DialogContent>
                             <DialogHeader>
                               <DialogTitle>Add New Staff Member</DialogTitle>
@@ -1747,8 +2475,14 @@ export default function App() {
                                 await secondaryAuth.signOut();
                                 
                                 toast.success("Staff member added successfully");
+                                setIsAddUserOpen(false);
                               } catch (error: any) {
-                                toast.error(error.message || "Failed to add staff");
+                                if (error.code === 'auth/operation-not-allowed') {
+                                  toast.error("Email/Password authentication is not enabled in your Firebase Console. Please enable it under Build > Authentication > Sign-in method.");
+                                } else {
+                                  toast.error(error.message || "Failed to add staff");
+                                }
+                                console.error("Staff creation error:", error);
                               }
                             }} className="space-y-4">
                               <div className="space-y-2">
