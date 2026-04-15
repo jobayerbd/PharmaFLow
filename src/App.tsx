@@ -102,7 +102,7 @@ import {
   SheetHeader, 
   SheetTitle, 
   SheetTrigger 
-} from '@/components/ui/sheet';
+} from '@/components/ui/Sheet';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
