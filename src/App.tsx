@@ -490,6 +490,29 @@ export default function App() {
   const [supplierName, setSupplierName] = useState('');
   const [purchaseSearchQuery, setPurchaseSearchQuery] = useState('');
 
+  // Settings Form State
+  const [settingsForm, setSettingsForm] = useState({ name: '', address: '', phone: '', email: '', faviconUrl: '' });
+
+  useEffect(() => {
+    if (pharmacyInfo) {
+      setSettingsForm({
+        name: pharmacyInfo.name || '',
+        address: pharmacyInfo.address || '',
+        phone: pharmacyInfo.phone || '',
+        email: pharmacyInfo.email || '',
+        faviconUrl: pharmacyInfo.faviconUrl || ''
+      });
+    }
+  }, [pharmacyInfo]);
+
+  // Pagination Resets
+  useEffect(() => setInventoryPage(1), [inventorySearchQuery, inventoryFilter]);
+  useEffect(() => setSalesPage(1), [salesFilterDate, salesFilterPayment, salesFilterSeller]);
+  useEffect(() => setCustomersPage(1), [customerSearchQuery]);
+  useEffect(() => setPurchasesPage(1), [purchaseSearchQuery]);
+  useEffect(() => setPosPage(1), [searchQuery]);
+  useEffect(() => setAccountingPage(1), [timeRange]);
+
   const printInvoice = (sale: any) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -1409,15 +1432,39 @@ export default function App() {
                       </CardContent>
                     </Card>
                     <Card className="shadow-sm border-none">
-                      <CardHeader><CardTitle>Low Stock Alerts</CardTitle></CardHeader>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                        <CardTitle>Low Stock Alerts</CardTitle>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-primary" 
+                          onClick={() => {
+                            setActiveTab('inventory');
+                            setInventoryFilter('low');
+                          }}
+                        >
+                          View All
+                        </Button>
+                      </CardHeader>
                       <CardContent>
                         <div className="space-y-4">
-                          {medicines.filter(m => m.stock <= m.lowStockThreshold).slice(0, 5).map(med => (
-                            <div key={med.id} className="flex items-center justify-between p-3 rounded-lg bg-amber-50 border border-amber-100">
-                              <div><p className="font-semibold text-sm">{med.name}</p></div>
-                              <div className="text-right"><p className="text-sm font-bold text-amber-700">{med.stock} left</p></div>
+                          {medicines.filter(m => m.stock <= (m.lowStockThreshold || 10)).slice(0, 5).map(med => (
+                            <div key={med.id} className="flex items-center justify-between p-3 rounded-lg bg-amber-50 border border-amber-100 dark:bg-amber-900/10 dark:border-amber-900/20">
+                              <div>
+                                <p className="font-semibold text-sm">{med.name}</p>
+                                <p className="text-[10px] text-amber-700 dark:text-amber-500 uppercase font-bold">Threshold: {med.lowStockThreshold || 10}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-bold text-amber-700 dark:text-amber-500">{med.stock} unit{med.stock !== 1 ? 's' : ''}</p>
+                              </div>
                             </div>
                           ))}
+                          {medicines.filter(m => m.stock <= (m.lowStockThreshold || 10)).length === 0 && (
+                            <div className="text-center py-8 text-muted-foreground">
+                              <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-green-500 opacity-50" />
+                              <p className="text-sm">All stock levels are healthy.</p>
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -1944,80 +1991,14 @@ export default function App() {
                             </TableCell>
                             <TableCell className="text-right font-medium">${med.price.toFixed(2)}</TableCell>
                             <TableCell className="text-right space-x-2">
-                              <Dialog open={!!editingMedicine && editingMedicine.id === med.id} onOpenChange={(open) => !open && setEditingMedicine(null)}>
-                                <DialogTrigger render={
-                                  <Button variant="ghost" size="icon" className="text-blue-600" onClick={() => setEditingMedicine(med)}>
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                } />
-                                <DialogContent key={med.id}>
-                                  <DialogHeader><DialogTitle>Edit Medicine</DialogTitle></DialogHeader>
-                                  <form 
-                                    key={med.id}
-                                    onSubmit={(e) => {
-                                      e.preventDefault();
-                                      const formData = new FormData(e.currentTarget);
-                                      updateMedicine(med.id, Object.fromEntries(formData));
-                                    }} 
-                                    className="space-y-4"
-                                  >
-                                    <div className="grid grid-cols-2 gap-4">
-                                      <div className="space-y-2">
-                                        <Label>Name</Label>
-                                        <Input name="name" defaultValue={med.name || ""} required />
-                                      </div>
-                                      <div className="space-y-2">
-                                        <Label>Generic Name</Label>
-                                        <Input name="genericName" defaultValue={med.genericName || ""} />
-                                      </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                      <div className="space-y-2">
-                                        <Label>Category</Label>
-                                        <Select name="category" defaultValue={med.category || "General"}>
-                                          <SelectTrigger>
-                                            <SelectValue placeholder="Category" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="General">General</SelectItem>
-                                            <SelectItem value="Antibiotics">Antibiotics</SelectItem>
-                                            <SelectItem value="Painkillers">Painkillers</SelectItem>
-                                            <SelectItem value="Vitamins">Vitamins</SelectItem>
-                                            <SelectItem value="Syrup">Syrup</SelectItem>
-                                            <SelectItem value="Tablets">Tablets</SelectItem>
-                                            <SelectItem value="Injections">Injections</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                      <div className="space-y-2">
-                                        <Label>Manufacturer</Label>
-                                        <Input name="manufacturer" defaultValue={med.manufacturer || ""} placeholder="Manufacturer" />
-                                      </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                      <div className="space-y-2">
-                                        <Label>Stock</Label>
-                                        <Input name="stock" type="number" defaultValue={med.stock ?? 0} required />
-                                      </div>
-                                      <div className="space-y-2">
-                                        <Label>Low Stock Threshold</Label>
-                                        <Input name="lowStockThreshold" type="number" defaultValue={med.lowStockThreshold ?? 10} required />
-                                      </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                      <div className="space-y-2">
-                                        <Label>Cost Price</Label>
-                                        <Input name="cost" type="number" step="0.01" defaultValue={med.cost ?? 0} required />
-                                      </div>
-                                      <div className="space-y-2">
-                                        <Label>Selling Price</Label>
-                                        <Input name="price" type="number" step="0.01" defaultValue={med.price ?? 0} required />
-                                      </div>
-                                    </div>
-                                    <Button type="submit" className="w-full">Update Medicine</Button>
-                                  </form>
-                                </DialogContent>
-                              </Dialog>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="text-blue-600" 
+                                onClick={() => setEditingMedicine(med)}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
                               <Button variant="ghost" size="icon" className="text-red-600" onClick={() => deleteMedicine(med.id)}><Trash2 className="w-4 h-4" /></Button>
                             </TableCell>
                           </TableRow>
@@ -2033,6 +2014,114 @@ export default function App() {
                     itemsPerPage={ITEMS_PER_PAGE}
                   />
                 </Card>
+
+                {/* Edit Medicine Dialog */}
+                <Dialog open={!!editingMedicine} onOpenChange={(open) => !open && setEditingMedicine(null)}>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Edit Medicine</DialogTitle></DialogHeader>
+                    {editingMedicine && (
+                      <form 
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          updateMedicine(editingMedicine.id, editingMedicine);
+                          setEditingMedicine(null);
+                        }} 
+                        className="space-y-4"
+                      >
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Name</Label>
+                            <Input 
+                              value={editingMedicine.name} 
+                              onChange={(e) => setEditingMedicine({ ...editingMedicine, name: e.target.value })} 
+                              required 
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Generic Name</Label>
+                            <Input 
+                              value={editingMedicine.genericName || ""} 
+                              onChange={(e) => setEditingMedicine({ ...editingMedicine, genericName: e.target.value })} 
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Category</Label>
+                            <Select 
+                              value={editingMedicine.category || "General"} 
+                              onValueChange={(val) => setEditingMedicine({ ...editingMedicine, category: val })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Category" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="General">General</SelectItem>
+                                <SelectItem value="Antibiotics">Antibiotics</SelectItem>
+                                <SelectItem value="Painkillers">Painkillers</SelectItem>
+                                <SelectItem value="Vitamins">Vitamins</SelectItem>
+                                <SelectItem value="Syrup">Syrup</SelectItem>
+                                <SelectItem value="Tablets">Tablets</SelectItem>
+                                <SelectItem value="Injections">Injections</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Manufacturer</Label>
+                            <Input 
+                              value={editingMedicine.manufacturer || ""} 
+                              onChange={(e) => setEditingMedicine({ ...editingMedicine, manufacturer: e.target.value })}
+                              placeholder="Manufacturer" 
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Stock</Label>
+                            <Input 
+                              type="number" 
+                              value={editingMedicine.stock} 
+                              onChange={(e) => setEditingMedicine({ ...editingMedicine, stock: parseInt(e.target.value) || 0 })} 
+                              required 
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Low Stock Threshold</Label>
+                            <Input 
+                              type="number" 
+                              value={editingMedicine.lowStockThreshold} 
+                              onChange={(e) => setEditingMedicine({ ...editingMedicine, lowStockThreshold: parseInt(e.target.value) || 0 })} 
+                              required 
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Cost Price</Label>
+                            <Input 
+                              type="number" 
+                              step="0.01" 
+                              value={editingMedicine.cost} 
+                              onChange={(e) => setEditingMedicine({ ...editingMedicine, cost: parseFloat(e.target.value) || 0 })} 
+                              required 
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Selling Price</Label>
+                            <Input 
+                              type="number" 
+                              step="0.01" 
+                              value={editingMedicine.price} 
+                              onChange={(e) => setEditingMedicine({ ...editingMedicine, price: parseFloat(e.target.value) || 0 })} 
+                              required 
+                            />
+                          </div>
+                        </div>
+                        <Button type="submit" className="w-full">Update Medicine</Button>
+                      </form>
+                    )}
+                  </DialogContent>
+                </Dialog>
               </div>
             )}
 
@@ -3350,33 +3439,57 @@ export default function App() {
                       </CardHeader>
                       <CardContent>
                         <form 
-                          key={pharmacyInfo ? 'loaded' : 'loading'}
                           onSubmit={(e) => {
                             e.preventDefault();
-                            const formData = new FormData(e.currentTarget);
-                            savePharmacyInfo(Object.fromEntries(formData));
+                            savePharmacyInfo(settingsForm);
                           }} 
                           className="space-y-4"
                         >
                           <div className="space-y-2">
                             <Label>Pharmacy Name</Label>
-                            <Input name="name" defaultValue={pharmacyInfo?.name || "PharmaFlow"} required />
+                            <Input 
+                              name="name" 
+                              value={settingsForm.name} 
+                              onChange={(e) => setSettingsForm({ ...settingsForm, name: e.target.value })} 
+                              required 
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label>Address</Label>
-                            <Input name="address" defaultValue={pharmacyInfo?.address || ""} placeholder="123 Health St, Medical City" />
+                            <Input 
+                              name="address" 
+                              value={settingsForm.address} 
+                              onChange={(e) => setSettingsForm({ ...settingsForm, address: e.target.value })} 
+                              placeholder="123 Health St, Medical City" 
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label>Phone Number</Label>
-                            <Input name="phone" defaultValue={pharmacyInfo?.phone || ""} placeholder="+1 234 567 890" />
+                            <Input 
+                              name="phone" 
+                              value={settingsForm.phone} 
+                              onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })} 
+                              placeholder="+1 234 567 890" 
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label>Email (Optional)</Label>
-                            <Input name="email" type="email" defaultValue={pharmacyInfo?.email || ""} placeholder="contact@pharmaflow.com" />
+                            <Input 
+                              name="email" 
+                              type="email" 
+                              value={settingsForm.email} 
+                              onChange={(e) => setSettingsForm({ ...settingsForm, email: e.target.value })} 
+                              placeholder="contact@pharmaflow.com" 
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label>Favicon URL (Optional)</Label>
-                            <Input name="faviconUrl" defaultValue={pharmacyInfo?.faviconUrl || ""} placeholder="https://example.com/favicon.ico" />
+                            <Input 
+                              name="faviconUrl" 
+                              value={settingsForm.faviconUrl} 
+                              onChange={(e) => setSettingsForm({ ...settingsForm, faviconUrl: e.target.value })} 
+                              placeholder="https://example.com/favicon.ico" 
+                            />
                           </div>
                           <Button type="submit" className="w-full">Save Changes</Button>
                         </form>
