@@ -1,5 +1,5 @@
 {
-  "name": "PharmaFlow - Pharmacy Management System",
+  "name": "PharmaFlow Management System",
   "description": "A comprehensive pharmacy management solution for sales, inventory, accounting, and customer tracking.",
   "requestFramePermissions": ["camera"]
 }

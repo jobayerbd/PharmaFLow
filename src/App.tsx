@@ -272,13 +272,13 @@ const SidebarItem = ({ icon: Icon, label, active, onClick }: { icon: any, label:
   </button>
 );
 
-const NavigationContent = ({ activeTab, setActiveTab, profile, user, handleLogout }: any) => (
+const NavigationContent = ({ activeTab, setActiveTab, profile, user, handleLogout, pharmacyInfo }: any) => (
   <div className="flex flex-col h-full">
     <div className="p-6 flex items-center gap-3 border-b md:hidden">
       <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
         <ShoppingCart className="w-5 h-5 text-white" />
       </div>
-      <h1 className="text-xl font-bold tracking-tight">PharmaFlow</h1>
+      <h1 className="text-xl font-bold tracking-tight">{pharmacyInfo?.name || 'PharmaFlow'}</h1>
     </div>
     
     <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -438,6 +438,21 @@ export default function App() {
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
 
+  useEffect(() => {
+    const name = pharmacyInfo?.name || "PharmaFlow";
+    document.title = `${name} Management System`;
+    
+    if (pharmacyInfo?.faviconUrl) {
+      let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.getElementsByTagName('head')[0].appendChild(link);
+      }
+      link.href = pharmacyInfo.faviconUrl;
+    }
+  }, [pharmacyInfo]);
+
   // Sales History Filters
   const [salesFilterDate, setSalesFilterDate] = useState('');
   const [salesFilterPayment, setSalesFilterPayment] = useState('All');
@@ -481,7 +496,7 @@ export default function App() {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Invoice - PharmaFlow</title>
+          <title>Invoice - ${pharmacyInfo?.name || 'PharmaFlow'}</title>
           <style>
             body { font-family: sans-serif; padding: 20px; color: #333; }
             .header { text-align: center; margin-bottom: 30px; }
@@ -1132,7 +1147,7 @@ export default function App() {
             <div className="mx-auto w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6">
               <ShoppingCart className="w-8 h-8 text-primary" />
             </div>
-            <CardTitle className="text-3xl font-bold tracking-tight">PharmaFlow</CardTitle>
+            <CardTitle className="text-3xl font-bold tracking-tight">{pharmacyInfo?.name || 'PharmaFlow'}</CardTitle>
             <CardDescription className="text-lg mt-2">Pharmacy Management System</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -1206,7 +1221,7 @@ export default function App() {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <ShoppingCart className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-lg font-bold tracking-tight">PharmaFlow</h1>
+            <h1 className="text-lg font-bold tracking-tight">{pharmacyInfo?.name || 'PharmaFlow'}</h1>
           </div>
           <Sheet>
             <SheetTrigger render={<Button variant="ghost" size="icon"><Menu className="w-6 h-6" /></Button>} />
@@ -1219,6 +1234,7 @@ export default function App() {
                 profile={profile} 
                 user={user} 
                 handleLogout={handleLogout} 
+                pharmacyInfo={pharmacyInfo}
               />
             </SheetContent>
           </Sheet>
@@ -1230,7 +1246,7 @@ export default function App() {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <ShoppingCart className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight">PharmaFlow</h1>
+            <h1 className="text-xl font-bold tracking-tight">{pharmacyInfo?.name || 'PharmaFlow'}</h1>
           </div>
           <NavigationContent 
             activeTab={activeTab} 
@@ -1238,6 +1254,7 @@ export default function App() {
             profile={profile} 
             user={user} 
             handleLogout={handleLogout} 
+            pharmacyInfo={pharmacyInfo}
           />
         </aside>
 
@@ -2942,6 +2959,10 @@ export default function App() {
                           <div className="space-y-2">
                             <Label>Email (Optional)</Label>
                             <Input name="email" type="email" defaultValue={pharmacyInfo?.email || ""} placeholder="contact@pharmaflow.com" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Favicon URL (Optional)</Label>
+                            <Input name="faviconUrl" defaultValue={pharmacyInfo?.faviconUrl || ""} placeholder="https://example.com/favicon.ico" />
                           </div>
                           <Button type="submit" className="w-full">Save Changes</Button>
                         </form>
