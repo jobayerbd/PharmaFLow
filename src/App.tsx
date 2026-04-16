@@ -148,6 +148,9 @@ import { cn } from "@/lib/utils";
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
+import { Pagination } from '@/components/Pagination';
+
+const ITEMS_PER_PAGE = 10;
 
 // --- Types ---
 
@@ -393,7 +396,20 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [timeRange, setTimeRange] = useState('7d');
   const [loading, setLoading] = useState(true);
+
+  // Pagination States
+  const [inventoryPage, setInventoryPage] = useState(1);
+  const [salesPage, setSalesPage] = useState(1);
+  const [customersPage, setCustomersPage] = useState(1);
+  const [purchasesPage, setPurchasesPage] = useState(1);
+  const [expensesPage, setExpensesPage] = useState(1);
+  const [adjustmentsPage, setAdjustmentsPage] = useState(1);
+  const [accountingPage, setAccountingPage] = useState(1);
+  const [usersPage, setUsersPage] = useState(1);
+  const [settingsUsersPage, setSettingsUsersPage] = useState(1);
+  const [posPage, setPosPage] = useState(1);
 
   // Data States
   const [medicines, setMedicines] = useState<Medicine[]>([]);
@@ -967,13 +983,32 @@ export default function App() {
   }, [sales, medicines]);
 
   const chartData = useMemo(() => {
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
+    if (timeRange === 'all') {
+      const monthlyData: { [key: string]: number } = {};
+      sales.forEach(s => {
+        const date = s.timestamp?.toDate();
+        if (date) {
+          const month = format(date, 'MMM yyyy');
+          monthlyData[month] = (monthlyData[month] || 0) + s.finalAmount;
+        }
+      });
+      return Object.entries(monthlyData)
+        .map(([name, sales]) => ({ name, sales }))
+        .sort((a, b) => {
+          const dateA = new Date(a.name);
+          const dateB = new Date(b.name);
+          return dateA.getTime() - dateB.getTime();
+        });
+    }
+
+    const days = timeRange === '30d' ? 30 : 7;
+    const rangeDays = Array.from({ length: days }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - i);
       return format(d, 'MMM dd');
     }).reverse();
 
-    return last7Days.map(day => {
+    return rangeDays.map(day => {
       const daySales = sales.filter(s => {
         const date = s.timestamp?.toDate();
         return date && format(date, 'MMM dd') === day;
@@ -983,7 +1018,103 @@ export default function App() {
         sales: daySales.reduce((sum, s) => sum + s.finalAmount, 0)
       };
     });
-  }, [sales]);
+  }, [sales, timeRange]);
+
+  const filteredInventory = useMemo(() => {
+    return medicines.filter(m => {
+      const matchesSearch = m.name.toLowerCase().includes(inventorySearchQuery.toLowerCase()) || 
+                          m.genericName?.toLowerCase().includes(inventorySearchQuery.toLowerCase());
+      const matchesFilter = inventoryFilter === 'all' || m.stock <= (m.lowStockThreshold || 10);
+      return matchesSearch && matchesFilter;
+    });
+  }, [medicines, inventorySearchQuery, inventoryFilter]);
+
+  const paginatedInventory = useMemo(() => {
+    const start = (inventoryPage - 1) * ITEMS_PER_PAGE;
+    return filteredInventory.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredInventory, inventoryPage]);
+
+  const filteredSales = useMemo(() => {
+    return sales.filter(sale => {
+      const dateMatch = !salesFilterDate || (sale.timestamp && format(sale.timestamp.toDate(), 'yyyy-MM-dd') === salesFilterDate);
+      const paymentMatch = salesFilterPayment === 'All' || sale.paymentMethod === salesFilterPayment;
+      const sellerMatch = salesFilterSeller === 'All' || sale.sellerId === salesFilterSeller;
+      return dateMatch && paymentMatch && sellerMatch;
+    });
+  }, [sales, salesFilterDate, salesFilterPayment, salesFilterSeller]);
+
+  const paginatedSales = useMemo(() => {
+    const start = (salesPage - 1) * ITEMS_PER_PAGE;
+    return filteredSales.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredSales, salesPage]);
+
+  const filteredCustomers = useMemo(() => {
+    return customers.filter(c => 
+      c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) || 
+      c.phone.includes(customerSearchQuery)
+    );
+  }, [customers, customerSearchQuery]);
+
+  const paginatedCustomers = useMemo(() => {
+    const start = (customersPage - 1) * ITEMS_PER_PAGE;
+    return filteredCustomers.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredCustomers, customersPage]);
+
+  const filteredPurchases = useMemo(() => {
+    return purchases.filter(p => 
+      p.supplierName.toLowerCase().includes(purchaseSearchQuery.toLowerCase())
+    );
+  }, [purchases, purchaseSearchQuery]);
+
+  const paginatedPurchases = useMemo(() => {
+    const start = (purchasesPage - 1) * ITEMS_PER_PAGE;
+    return filteredPurchases.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredPurchases, purchasesPage]);
+
+  const paginatedExpenses = useMemo(() => {
+    const start = (expensesPage - 1) * ITEMS_PER_PAGE;
+    return expenses.slice(start, start + ITEMS_PER_PAGE);
+  }, [expenses, expensesPage]);
+
+  const paginatedAdjustments = useMemo(() => {
+    const start = (adjustmentsPage - 1) * ITEMS_PER_PAGE;
+    return stockAdjustments.slice(start, start + ITEMS_PER_PAGE);
+  }, [stockAdjustments, adjustmentsPage]);
+
+  const allTransactions = useMemo(() => {
+    return [
+      ...sales.map(s => ({ ...s, type: 'Income', desc: `Sale #${s.id.slice(-4)}` })),
+      ...expenses.map(e => ({ ...e, type: 'Expense', desc: e.note, finalAmount: -e.amount }))
+    ].sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+  }, [sales, expenses]);
+
+  const paginatedTransactions = useMemo(() => {
+    const start = (accountingPage - 1) * ITEMS_PER_PAGE;
+    return allTransactions.slice(start, start + ITEMS_PER_PAGE);
+  }, [allTransactions, accountingPage]);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (usersPage - 1) * ITEMS_PER_PAGE;
+    return users.slice(start, start + ITEMS_PER_PAGE);
+  }, [users, usersPage]);
+
+  const filteredSettingsUsers = useMemo(() => {
+    return users.filter(u => u.uid !== user?.uid);
+  }, [users, user]);
+
+  const paginatedSettingsUsers = useMemo(() => {
+    const start = (settingsUsersPage - 1) * ITEMS_PER_PAGE;
+    return filteredSettingsUsers.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredSettingsUsers, settingsUsersPage]);
+
+  const filteredPosMedicines = useMemo(() => {
+    return medicines.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [medicines, searchQuery]);
+
+  const paginatedPosMedicines = useMemo(() => {
+    const start = (posPage - 1) * ITEMS_PER_PAGE;
+    return filteredPosMedicines.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredPosMedicines, posPage]);
 
   if (loading) {
     return (
@@ -1131,7 +1262,19 @@ export default function App() {
                   </div>
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <Card className="lg:col-span-2 shadow-sm border-none">
-                      <CardHeader><CardTitle>Revenue Overview</CardTitle></CardHeader>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle>Revenue Overview</CardTitle>
+                        <Select value={timeRange} onValueChange={setTimeRange}>
+                          <SelectTrigger className="w-[140px] h-8 text-xs">
+                            <SelectValue placeholder="Select range" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="7d">Last 7 Days</SelectItem>
+                            <SelectItem value="30d">Last 30 Days</SelectItem>
+                            <SelectItem value="all">All Time</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </CardHeader>
                       <CardContent className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={chartData}>
@@ -1179,16 +1322,27 @@ export default function App() {
                         <span className="hidden sm:inline">Scan</span>
                       </Button>
                     </div>
-                      <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 content-start pb-4">
-                        {medicines.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase())).map(med => (
-                          <Card key={med.id} className="cursor-pointer hover:border-primary" onClick={() => addToCart(med)}>
-                            <CardContent className="p-4">
-                              <h4 className="font-bold">{med.name}</h4>
-                              <p className="text-primary font-bold">${med.price.toFixed(2)}</p>
-                              <p className="text-xs text-muted-foreground">Stock: {med.stock}</p>
-                            </CardContent>
-                          </Card>
-                        ))}
+                      <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 content-start pb-4">
+                          {paginatedPosMedicines.map(med => (
+                            <Card key={med.id} className="cursor-pointer hover:border-primary" onClick={() => addToCart(med)}>
+                              <CardContent className="p-4">
+                                <h4 className="font-bold">{med.name}</h4>
+                                <p className="text-primary font-bold">${med.price.toFixed(2)}</p>
+                                <p className="text-xs text-muted-foreground">Stock: {med.stock}</p>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                        <div className="mt-auto pt-4">
+                          <Pagination 
+                            currentPage={posPage}
+                            totalPages={Math.ceil(filteredPosMedicines.length / ITEMS_PER_PAGE)}
+                            onPageChange={setPosPage}
+                            totalItems={filteredPosMedicines.length}
+                            itemsPerPage={ITEMS_PER_PAGE}
+                          />
+                        </div>
                       </div>
                     </div>
                     <Card className="flex flex-col shadow-lg border-none min-h-0">
@@ -1414,7 +1568,7 @@ export default function App() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {purchases.map(p => (
+                              {paginatedPurchases.map(p => (
                                 <TableRow key={p.id}>
                                   <TableCell className="text-sm">
                                     {p.timestamp ? format(p.timestamp.toDate(), 'MMM dd, HH:mm') : '...'}
@@ -1427,6 +1581,13 @@ export default function App() {
                             </TableBody>
                           </Table>
                         </div>
+                        <Pagination 
+                          currentPage={purchasesPage}
+                          totalPages={Math.ceil(filteredPurchases.length / ITEMS_PER_PAGE)}
+                          onPageChange={setPurchasesPage}
+                          totalItems={filteredPurchases.length}
+                          itemsPerPage={ITEMS_PER_PAGE}
+                        />
                       </Card>
                     </TabsContent>
                     </Tabs>
@@ -1617,14 +1778,7 @@ export default function App() {
                           </TableRow>
                         </TableHeader>
                       <TableBody>
-                        {medicines
-                          .filter(m => {
-                            const matchesSearch = m.name.toLowerCase().includes(inventorySearchQuery.toLowerCase()) || 
-                                                m.genericName?.toLowerCase().includes(inventorySearchQuery.toLowerCase());
-                            const matchesFilter = inventoryFilter === 'all' || m.stock <= (m.lowStockThreshold || 10);
-                            return matchesSearch && matchesFilter;
-                          })
-                          .map(med => (
+                        {paginatedInventory.map(med => (
                           <TableRow key={med.id}>
                             <TableCell>
                               <div className="font-medium">{med.name}</div>
@@ -1726,6 +1880,13 @@ export default function App() {
                       </TableBody>
                     </Table>
                   </div>
+                  <Pagination 
+                    currentPage={inventoryPage}
+                    totalPages={Math.ceil(filteredInventory.length / ITEMS_PER_PAGE)}
+                    onPageChange={setInventoryPage}
+                    totalItems={filteredInventory.length}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                  />
                 </Card>
               </div>
             )}
@@ -1801,14 +1962,7 @@ export default function App() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {sales
-                            .filter(sale => {
-                              const dateMatch = !salesFilterDate || (sale.timestamp && format(sale.timestamp.toDate(), 'yyyy-MM-dd') === salesFilterDate);
-                              const paymentMatch = salesFilterPayment === 'All' || sale.paymentMethod === salesFilterPayment;
-                              const sellerMatch = salesFilterSeller === 'All' || sale.sellerId === salesFilterSeller;
-                              return dateMatch && paymentMatch && sellerMatch;
-                            })
-                            .map(sale => (
+                          {paginatedSales.map(sale => (
                             <TableRow key={sale.id}>
                               <TableCell>{sale.timestamp ? format(sale.timestamp.toDate(), 'MMM dd, HH:mm') : '...'}</TableCell>
                               <TableCell className="text-sm font-medium">
@@ -1829,6 +1983,13 @@ export default function App() {
                         </TableBody>
                       </Table>
                     </div>
+                    <Pagination 
+                      currentPage={salesPage}
+                      totalPages={Math.ceil(filteredSales.length / ITEMS_PER_PAGE)}
+                      onPageChange={setSalesPage}
+                      totalItems={filteredSales.length}
+                      itemsPerPage={ITEMS_PER_PAGE}
+                    />
                   </Card>
                 </div>
               )}
@@ -2117,12 +2278,7 @@ export default function App() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {customers
-                              .filter(c => 
-                                c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) || 
-                                c.phone.includes(customerSearchQuery)
-                              )
-                              .map(customer => (
+                            {paginatedCustomers.map(customer => (
                               <TableRow key={customer.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedCustomer(customer)}>
                                 <TableCell className="font-medium">{customer.name}</TableCell>
                                 <TableCell>{customer.phone}</TableCell>
@@ -2139,6 +2295,13 @@ export default function App() {
                           </TableBody>
                         </Table>
                       </div>
+                      <Pagination 
+                        currentPage={customersPage}
+                        totalPages={Math.ceil(filteredCustomers.length / ITEMS_PER_PAGE)}
+                        onPageChange={setCustomersPage}
+                        totalItems={filteredCustomers.length}
+                        itemsPerPage={ITEMS_PER_PAGE}
+                      />
                     </Card>
                     </>
                   )}
@@ -2249,7 +2412,7 @@ export default function App() {
                           </TableRow>
                         </TableHeader>
                       <TableBody>
-                        {stockAdjustments.map(adj => (
+                        {paginatedAdjustments.map(adj => (
                           <TableRow key={adj.id}>
                             <TableCell className="text-sm">{adj.timestamp ? format(adj.timestamp.toDate(), 'MMM dd, HH:mm') : '...'}</TableCell>
                             <TableCell className="font-medium">{adj.medicineName}</TableCell>
@@ -2265,6 +2428,13 @@ export default function App() {
                       </TableBody>
                     </Table>
                   </div>
+                  <Pagination 
+                    currentPage={adjustmentsPage}
+                    totalPages={Math.ceil(stockAdjustments.length / ITEMS_PER_PAGE)}
+                    onPageChange={setAdjustmentsPage}
+                    totalItems={stockAdjustments.length}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                  />
                 </Card>
               </div>
             )}
@@ -2323,7 +2493,7 @@ export default function App() {
                           </TableRow>
                         </TableHeader>
                       <TableBody>
-                        {expenses.map(exp => (
+                        {paginatedExpenses.map(exp => (
                           <TableRow key={exp.id}>
                             <TableCell className="text-sm">{exp.timestamp ? format(exp.timestamp.toDate(), 'MMM dd, HH:mm') : '...'}</TableCell>
                             <TableCell><Badge variant="outline">{exp.category}</Badge></TableCell>
@@ -2334,6 +2504,13 @@ export default function App() {
                       </TableBody>
                     </Table>
                   </div>
+                  <Pagination 
+                    currentPage={expensesPage}
+                    totalPages={Math.ceil(expenses.length / ITEMS_PER_PAGE)}
+                    onPageChange={setExpensesPage}
+                    totalItems={expenses.length}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                  />
                 </Card>
               </div>
             )}
@@ -2374,13 +2551,7 @@ export default function App() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {[
-                          ...sales.map(s => ({ ...s, type: 'Income', desc: `Sale #${s.id.slice(-4)}` })),
-                          ...expenses.map(e => ({ ...e, type: 'Expense', desc: e.note, finalAmount: -e.amount }))
-                        ]
-                        .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0))
-                        .slice(0, 20)
-                        .map((t, idx) => (
+                        {paginatedTransactions.map((t, idx) => (
                           <TableRow key={idx}>
                             <TableCell className="text-sm">{t.timestamp ? format(t.timestamp.toDate(), 'MMM dd, HH:mm') : '...'}</TableCell>
                             <TableCell>
@@ -2397,6 +2568,13 @@ export default function App() {
                       </TableBody>
                     </Table>
                   </div>
+                  <Pagination 
+                    currentPage={accountingPage}
+                    totalPages={Math.ceil(allTransactions.length / ITEMS_PER_PAGE)}
+                    onPageChange={setAccountingPage}
+                    totalItems={allTransactions.length}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                  />
                 </Card>
               </div>
             )}
@@ -2484,7 +2662,7 @@ export default function App() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {users.map(u => (
+                        {paginatedUsers.map(u => (
                           <TableRow key={u.uid}>
                             <TableCell className="font-medium">{u.name}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
@@ -2514,6 +2692,13 @@ export default function App() {
                       </TableBody>
                     </Table>
                   </div>
+                  <Pagination 
+                    currentPage={usersPage}
+                    totalPages={Math.ceil(users.length / ITEMS_PER_PAGE)}
+                    onPageChange={setUsersPage}
+                    totalItems={users.length}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                  />
                 </Card>
               </div>
             )}
@@ -2683,7 +2868,7 @@ export default function App() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {users.filter(u => u.uid !== user.uid).map(u => (
+                              {paginatedSettingsUsers.map(u => (
                                 <TableRow key={u.uid}>
                                   <TableCell>
                                     <div className="font-medium">{u.name}</div>
@@ -2717,6 +2902,13 @@ export default function App() {
                             </Table>
                           </div>
                         </div>
+                        <Pagination 
+                          currentPage={settingsUsersPage}
+                          totalPages={Math.ceil(filteredSettingsUsers.length / ITEMS_PER_PAGE)}
+                          onPageChange={setSettingsUsersPage}
+                          totalItems={filteredSettingsUsers.length}
+                          itemsPerPage={ITEMS_PER_PAGE}
+                        />
                       </CardContent>
                     </Card>
 
