@@ -1276,7 +1276,7 @@ export default function App() {
                         </Select>
                       </CardHeader>
                       <CardContent className="h-[300px]">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                           <LineChart data={chartData}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                             <XAxis dataKey="name" axisLine={false} tickLine={false} />
@@ -2762,7 +2762,7 @@ export default function App() {
                   <h2 className="text-3xl font-bold">Reports</h2>
                   <Card className="p-6 border-none shadow-sm">
                     <div className="h-[400px]">
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                         <BarChart data={chartData}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
                           <XAxis dataKey="name" />
