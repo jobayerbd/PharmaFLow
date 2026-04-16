@@ -39,7 +39,8 @@ import {
   Check,
   ChevronsUpDown,
   Barcode,
-  Camera
+  Camera,
+  DollarSign
 } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'motion/react';
@@ -173,6 +174,8 @@ interface SaleItem {
   name: string;
   quantity: number;
   price: number;
+  cost: number;
+  category: string;
   subtotal: number;
 }
 
@@ -426,6 +429,12 @@ export default function App() {
   const [stockAdjustments, setStockAdjustments] = useState<StockAdjustment[]>([]);
   const [pharmacyInfo, setPharmacyInfo] = useState<any>(null);
 
+  // Report States
+  const [reportSubTab, setReportSubTab] = useState('overview');
+  const [reportDateFrom, setReportDateFrom] = useState('');
+  const [reportDateTo, setReportDateTo] = useState('');
+  const [reportCategory, setReportCategory] = useState('All');
+
   // Stock Adjustment State
   const [adjMedicineId, setAdjMedicineId] = useState("");
   const [adjOpen, setAdjOpen] = useState(false);
@@ -468,6 +477,7 @@ export default function App() {
   const [posDiscount, setPosDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [posCustomerName, setPosCustomerName] = useState('');
   const [amountPaid, setAmountPaid] = useState<string>('');
   const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
   const [lastSale, setLastSale] = useState<any | null>(null);
@@ -805,6 +815,8 @@ export default function App() {
         name: med.name,
         quantity: 1,
         price: med.price,
+        cost: med.cost || 0,
+        category: med.category || 'General',
         subtotal: med.price
       }]);
     }
@@ -853,11 +865,13 @@ export default function App() {
         dueAmount: dueAmount,
         paymentMethod,
         customerPhone,
+        customerName: posCustomerName,
         timestamp: serverTimestamp(),
         sellerId: user?.uid
       };
       
-      const docRef = await addDoc(collection(db, 'sales'), saleData);
+      const docRef = await addDoc(collection(db, 'sales'), { ...saleData, id: '' });
+      await updateDoc(doc(db, 'sales', docRef.id), { id: docRef.id });
       
       // Register customer if phone provided and not already registered
       if (customerPhone) {
@@ -865,7 +879,7 @@ export default function App() {
         if (!existingCustomer) {
           try {
             await addDoc(collection(db, 'customers'), {
-              name: `Customer ${customerPhone.slice(-4)}`,
+              name: posCustomerName || `Customer ${customerPhone.slice(-4)}`,
               phone: customerPhone,
               totalPurchases: 1,
               lastPurchase: serverTimestamp(),
@@ -904,6 +918,7 @@ export default function App() {
       setCart([]);
       setPosDiscount(0);
       setCustomerPhone('');
+      setPosCustomerName('');
       setAmountPaid('');
       toast.success("Sale completed successfully");
     } catch (error) {
@@ -1125,6 +1140,95 @@ export default function App() {
   const filteredPosMedicines = useMemo(() => {
     return medicines.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
   }, [medicines, searchQuery]);
+
+  const reportTotals = useMemo(() => {
+    const filteredReportSales = sales.filter(sale => {
+      if (!reportDateFrom && !reportDateTo) return true;
+      const saleDate = sale.timestamp?.toDate ? sale.timestamp.toDate() : new Date();
+      if (reportDateFrom && saleDate < new Date(reportDateFrom)) return false;
+      if (reportDateTo && saleDate > new Date(reportDateTo)) return false;
+      return true;
+    });
+
+    const totalSales = filteredReportSales.reduce((sum, s) => sum + s.finalAmount, 0);
+    const totalDue = filteredReportSales.reduce((sum, s) => sum + s.dueAmount, 0);
+    
+    let totalProfit = 0;
+    filteredReportSales.forEach(sale => {
+      sale.items.forEach(item => {
+        const itemProfit = (item.price - (item.cost || 0)) * item.quantity;
+        totalProfit += itemProfit;
+      });
+    });
+    totalProfit -= filteredReportSales.reduce((sum, s) => sum + (s.discount || 0), 0);
+
+    const stockValue = medicines.reduce((sum, m) => sum + (m.stock * (m.cost || 0)), 0);
+    const now = new Date();
+    const expiredCount = medicines.filter(m => m.expiryDate && new Date(m.expiryDate) < now).length;
+    const nearExpiryCount = medicines.filter(m => {
+       if (!m.expiryDate) return false;
+       const expiry = new Date(m.expiryDate);
+       const diff = (expiry.getTime() - now.getTime()) / (1000 * 3600 * 24);
+       return diff > 0 && diff <= 90;
+    }).length;
+
+    const totalPurchaseCost = purchases.filter(p => {
+       if (!reportDateFrom && !reportDateTo) return true;
+       const pDate = p.timestamp?.toDate ? p.timestamp.toDate() : new Date();
+       if (reportDateFrom && pDate < new Date(reportDateFrom)) return false;
+       if (reportDateTo && pDate > new Date(reportDateTo)) return false;
+       return true;
+    }).reduce((sum, p) => sum + p.totalCost, 0);
+
+    return {
+      totalSales,
+      totalProfit,
+      totalDue,
+      stockValue,
+      expiredCount,
+      nearExpiryCount,
+      totalPurchaseCost,
+      filteredSales: filteredReportSales
+    };
+  }, [sales, medicines, purchases, reportDateFrom, reportDateTo]);
+
+  const dueAging = useMemo(() => {
+    const today = new Date();
+    const aging = { tier1: 0, tier2: 0, tier3: 0 };
+    customers.filter(c => c.balance > 0).forEach(customer => {
+       const customerSales = sales.filter(s => s.customerPhone === customer.phone && s.dueAmount > 0);
+       if (customerSales.length === 0) {
+          aging.tier1 += customer.balance;
+          return;
+       }
+       const oldestSaleDate = customerSales.reduce((oldest, current) => {
+          const currentTS = current.timestamp?.toDate ? current.timestamp.toDate() : new Date();
+          return currentTS < oldest ? currentTS : oldest;
+       }, new Date());
+       const diffDays = Math.floor((today.getTime() - oldestSaleDate.getTime()) / (1000 * 3600 * 24));
+       if (diffDays <= 7) aging.tier1 += customer.balance;
+       else if (diffDays <= 30) aging.tier2 += customer.balance;
+       else aging.tier3 += customer.balance;
+    });
+    return aging;
+  }, [customers, sales]);
+
+  const reportChartData = useMemo(() => {
+    const dailyData: { [key: string]: number } = {};
+    if (reportTotals.filteredSales.length === 0) return [];
+    
+    reportTotals.filteredSales.forEach(s => {
+      const date = s.timestamp?.toDate ? s.timestamp.toDate() : new Date();
+      if (date) {
+        const day = format(date, 'MMM dd');
+        dailyData[day] = (dailyData[day] || 0) + s.finalAmount;
+      }
+    });
+    
+    return Object.entries(dailyData)
+      .map(([name, sales]) => ({ name, sales }))
+      .sort((a, b) => new Date(a.name).getTime() - new Date(b.name).getTime());
+  }, [reportTotals.filteredSales]);
 
   const paginatedPosMedicines = useMemo(() => {
     const start = (posPage - 1) * ITEMS_PER_PAGE;
@@ -1405,61 +1509,85 @@ export default function App() {
                     </div>
                   </CardContent>
                       <div className="p-4 md:p-6 border-t bg-muted/30 space-y-4 shrink-0">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-xs">Customer Phone</Label>
-                          <Input 
-                            placeholder="Phone..." 
-                            className="h-9"
-                            value={customerPhone}
-                            onChange={(e) => setCustomerPhone(e.target.value)}
-                          />
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label className="text-xs">Customer Phone</Label>
+                            <Input 
+                              placeholder="Phone (Enter to fetch)..." 
+                              className="h-9"
+                              value={customerPhone}
+                              onChange={(e) => setCustomerPhone(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && customerPhone) {
+                                  const existing = customers.find(c => c.phone === customerPhone);
+                                  if (existing) {
+                                    setPosCustomerName(existing.name);
+                                    toast.success(`Customer found: ${existing.name}`);
+                                  } else {
+                                    toast.info("New customer number");
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs">Customer Name</Label>
+                            <Input 
+                              placeholder="Name..." 
+                              className="h-9"
+                              value={posCustomerName}
+                              onChange={(e) => setPosCustomerName(e.target.value)}
+                            />
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs">Payment Method</Label>
-                          <div className="flex gap-1">
-                            {['Cash', 'Card', 'Mobile'].map((method) => (
-                              <Button
-                                key={method}
-                                variant={paymentMethod === method ? 'default' : 'outline'}
-                                size="sm"
-                                className="flex-1 h-9 text-xs px-1"
-                                onClick={() => setPaymentMethod(method)}
-                              >
-                                {method}
-                              </Button>
-                            ))}
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label className="text-xs">Payment Method</Label>
+                            <div className="flex gap-1">
+                              {['Cash', 'Card', 'Mobile'].map((method) => (
+                                <Button
+                                  key={method}
+                                  variant={paymentMethod === method ? 'default' : 'outline'}
+                                  size="sm"
+                                  className="flex-1 h-9 text-xs px-1"
+                                  onClick={() => setPaymentMethod(method)}
+                                >
+                                  {method}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs">Amount Paid</Label>
+                            <Input 
+                              type="number"
+                              placeholder={finalCartAmount.toFixed(2)}
+                              className="h-9"
+                              value={amountPaid}
+                              onChange={(e) => setAmountPaid(e.target.value)}
+                            />
                           </div>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-xs">Amount Paid</Label>
-                          <Input 
-                            type="number"
-                            placeholder={finalCartAmount.toFixed(2)}
-                            className="h-9"
-                            value={amountPaid}
-                            onChange={(e) => setAmountPaid(e.target.value)}
-                          />
-                        </div>
                         <div className="space-y-2">
                           <Label className="text-xs">Due Amount</Label>
                           <div className="h-9 flex items-center px-3 bg-muted rounded-md text-sm font-bold text-red-600">
                             ${dueAmount.toFixed(2)}
                           </div>
                         </div>
-                      </div>
-
-                      <div className="pt-2">
-                        <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                          <span>Subtotal</span>
-                          <span>${totalCartAmount.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-xl font-bold">
-                          <span>Total</span>
-                          <span>${finalCartAmount.toFixed(2)}</span>
+                        <div className="flex flex-col justify-center">
+                          <div className="flex justify-between text-[10px] text-muted-foreground">
+                            <span>Subtotal</span>
+                            <span>${totalCartAmount.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-lg font-bold">
+                            <span>Total</span>
+                            <span>${finalCartAmount.toFixed(2)}</span>
+                          </div>
                         </div>
                       </div>
                       
@@ -2775,21 +2903,307 @@ export default function App() {
               )}
 
               {activeTab === 'reports' && (
-                <div className="space-y-8">
-                  <h2 className="text-3xl font-bold">Reports</h2>
-                  <Card className="p-6 border-none shadow-sm">
-                    <div className="h-[400px]">
-                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                        <BarChart data={chartData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="name" />
-                          <YAxis />
-                          <Tooltip />
-                          <Bar dataKey="sales" fill="hsl(var(--primary))" />
-                        </BarChart>
-                      </ResponsiveContainer>
+                <div className="space-y-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <h2 className="text-3xl font-bold tracking-tight">Report Center</h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 bg-white border rounded-md px-3 py-1 shadow-sm">
+                        <Label className="text-xs font-semibold whitespace-nowrap">From:</Label>
+                        <Input 
+                          type="date" 
+                          className="border-none h-7 p-0 focus-visible:ring-0 text-xs w-28" 
+                          value={reportDateFrom} 
+                          onChange={(e) => setReportDateFrom(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 bg-white border rounded-md px-3 py-1 shadow-sm">
+                        <Label className="text-xs font-semibold whitespace-nowrap">To:</Label>
+                        <Input 
+                          type="date" 
+                          className="border-none h-7 p-0 focus-visible:ring-0 text-xs w-28" 
+                          value={reportDateTo} 
+                          onChange={(e) => setReportDateTo(e.target.value)}
+                        />
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => { setReportDateFrom(''); setReportDateTo(''); }}>
+                        Reset
+                      </Button>
+                      <Button size="sm" className="gap-2" onClick={() => window.print()}>
+                        <Printer className="w-4 h-4" /> Export PDF
+                      </Button>
                     </div>
-                  </Card>
+                  </div>
+
+                  <Tabs value={reportSubTab} onValueChange={setReportSubTab} className="space-y-6">
+                    <TabsList className="bg-muted/50 p-1">
+                      <TabsTrigger value="overview">Executive Overview</TabsTrigger>
+                      <TabsTrigger value="sales">Sales Analysis</TabsTrigger>
+                      <TabsTrigger value="inventory">Inventory Intelligence</TabsTrigger>
+                      <TabsTrigger value="customers">Customer Insights</TabsTrigger>
+                      <TabsTrigger value="profit">Profit & Loss</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="overview" className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <StatCard 
+                          title="Total Sales" 
+                          value={`$${reportTotals.totalSales.toFixed(2)}`} 
+                          icon={TrendingUp} 
+                          color="bg-blue-50 text-blue-600" 
+                        />
+                        <StatCard 
+                          title="Total Profit" 
+                          value={`$${reportTotals.totalProfit.toFixed(2)}`} 
+                          icon={DollarSign} 
+                          color="bg-green-50 text-green-600" 
+                        />
+                        <StatCard 
+                          title="Dues Receivable" 
+                          value={`$${reportTotals.totalDue.toFixed(2)}`} 
+                          icon={AlertTriangle} 
+                          color="bg-red-50 text-red-600" 
+                        />
+                        <StatCard 
+                          title="Stock Value" 
+                          value={`$${reportTotals.stockValue.toFixed(2)}`} 
+                          icon={Package} 
+                          color="bg-purple-50 text-purple-600" 
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <Card className="p-6 border-none shadow-sm">
+                          <CardHeader className="px-0 pt-0">
+                            <CardTitle className="text-lg">Sales Trend</CardTitle>
+                          </CardHeader>
+                          <div className="h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                              <LineChart data={reportChartData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                                <YAxis axisLine={false} tickLine={false} />
+                                <Tooltip />
+                                <Line type="monotone" dataKey="sales" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </Card>
+                        <Card className="p-6 border-none shadow-sm">
+                          <CardHeader className="px-0 pt-0">
+                            <CardTitle className="text-lg">Category Distribution</CardTitle>
+                          </CardHeader>
+                          <div className="h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                              <BarChart data={reportChartData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                                <YAxis axisLine={false} tickLine={false} />
+                                <Tooltip />
+                                <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </Card>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <Card className="p-6 border-none shadow-sm">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="font-semibold text-muted-foreground">Expired Items</h4>
+                            <Badge variant="destructive">{reportTotals.expiredCount}</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Items past their expiry date needs disposal or return to supplier.</p>
+                        </Card>
+                        <Card className="p-6 border-none shadow-sm">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="font-semibold text-muted-foreground">Near Expiry (90d)</h4>
+                            <Badge variant="warning" className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border-none">
+                              {reportTotals.nearExpiryCount}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Items expiring within next 3 months. Consider discounting or returning.</p>
+                        </Card>
+                        <Card className="p-6 border-none shadow-sm">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="font-semibold text-muted-foreground">Purchase Value</h4>
+                            <span className="font-bold text-lg">${reportTotals.totalPurchaseCost.toFixed(2)}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Total cost of goods purchased within the selected period.</p>
+                        </Card>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="sales">
+                      <Card className="border-none shadow-sm">
+                        <CardHeader>
+                          <CardTitle>Sales Analysis</CardTitle>
+                          <CardDescription>Detailed breakdown of transaction performance.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="rounded-lg border">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Invoice</TableHead>
+                                  <TableHead>Date</TableHead>
+                                  <TableHead>Customer</TableHead>
+                                  <TableHead>Total</TableHead>
+                                  <TableHead>Profit</TableHead>
+                                  <TableHead>Payment</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {reportTotals.filteredSales.map(sale => {
+                                  const saleProfit = sale.items.reduce((sum, i) => sum + (i.price - (i.cost || 0)) * i.quantity, 0) - (sale.discount || 0);
+                                  return (
+                                    <TableRow key={sale.id}>
+                                      <TableCell className="font-mono text-xs">#{sale.id.slice(-6)}</TableCell>
+                                      <TableCell className="text-xs">{sale.timestamp?.toDate ? format(sale.timestamp.toDate(), 'PP') : 'N/A'}</TableCell>
+                                      <TableCell className="text-xs">{sale.customerName || 'Guest'}</TableCell>
+                                      <TableCell className="text-xs font-bold">${sale.finalAmount.toFixed(2)}</TableCell>
+                                      <TableCell className="text-xs font-medium text-green-600">${saleProfit.toFixed(2)}</TableCell>
+                                      <TableCell><Badge variant="outline" className="text-[10px]">{sale.paymentMethod}</Badge></TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+
+                    <TabsContent value="inventory">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <Card className="border-none shadow-sm">
+                                <CardHeader>
+                                    <CardTitle>Low Stock Items</CardTitle>
+                                    <CardDescription>Items below threshold levels.</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="space-y-4">
+                                        {medicines.filter(m => m.stock <= m.lowStockThreshold).map(m => (
+                                            <div key={m.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100">
+                                                <div>
+                                                    <p className="font-semibold text-sm">{m.name}</p>
+                                                    <p className="text-xs text-muted-foreground">Stock: {m.stock} / Threshold: {m.lowStockThreshold}</p>
+                                                </div>
+                                                <Badge variant="destructive">Low</Badge>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <Card className="border-none shadow-sm">
+                                <CardHeader>
+                                    <CardTitle>Expiration Risks</CardTitle>
+                                    <CardDescription>Items expiring soon or already expired.</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="space-y-4">
+                                        {medicines.filter(m => m.expiryDate && new Date(m.expiryDate) < new Date(Date.now() + 30 * 24 * 3600 * 1000)).map(m => {
+                                            const isExpired = new Date(m.expiryDate!) < new Date();
+                                            return (
+                                                <div key={m.id} className={`flex items-center justify-between p-3 rounded-lg border ${isExpired ? 'bg-red-50 border-red-100' : 'bg-yellow-50 border-yellow-100'}`}>
+                                                    <div>
+                                                        <p className="font-semibold text-sm">{m.name}</p>
+                                                        <p className="text-xs text-muted-foreground">Expiry: {format(new Date(m.expiryDate!), 'PP')}</p>
+                                                    </div>
+                                                    <Badge variant={isExpired ? 'destructive' : 'warning'}>{isExpired ? 'Expired' : 'Near'}</Badge>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="customers">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <Card className="p-4 border-none shadow-sm bg-blue-50/50">
+                            <p className="text-xs font-semibold text-blue-600 uppercase">0-7 Days Due</p>
+                            <p className="text-2xl font-bold">${dueAging.tier1.toFixed(2)}</p>
+                        </Card>
+                        <Card className="p-4 border-none shadow-sm bg-yellow-50/50">
+                            <p className="text-xs font-semibold text-yellow-600 uppercase">8-30 Days Due</p>
+                            <p className="text-2xl font-bold">${dueAging.tier2.toFixed(2)}</p>
+                        </Card>
+                        <Card className="p-4 border-none shadow-sm bg-red-50/50">
+                            <p className="text-xs font-semibold text-red-600 uppercase">30+ Days Due</p>
+                            <p className="text-2xl font-bold">${dueAging.tier3.toFixed(2)}</p>
+                        </Card>
+                      </div>
+                      <Card className="border-none shadow-sm">
+                        <CardHeader>
+                          <CardTitle>Top Customers</CardTitle>
+                          <CardDescription>By total spend and transaction frequency.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Customer</TableHead>
+                                    <TableHead>Balance</TableHead>
+                                    <TableHead>Recent Purchase</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {customers.map(c => (
+                                    <TableRow key={c.id}>
+                                        <TableCell>
+                                            <p className="font-bold text-sm">{c.name}</p>
+                                            <p className="text-xs text-muted-foreground">{c.phone}</p>
+                                        </TableCell>
+                                        <TableCell className={`font-bold ${c.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                            ${c.balance.toFixed(2)}
+                                        </TableCell>
+                                        <TableCell className="text-xs">
+                                            {c.lastPurchase?.toDate ? format(c.lastPurchase.toDate(), 'PP') : 'Never'}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                          </Table>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+
+                    <TabsContent value="profit">
+                        <Card className="border-none shadow-sm overflow-hidden">
+                            <div className="bg-primary p-8 text-white">
+                                <h3 className="text-sm font-medium opacity-80 uppercase tracking-widest mb-1">Net Profit Margin</h3>
+                                <div className="flex items-end gap-3">
+                                    <span className="text-5xl font-black">${reportTotals.totalProfit.toFixed(2)}</span>
+                                    <Badge className="mb-2 bg-white/20 text-white border-none">
+                                        {reportTotals.totalSales > 0 ? ((reportTotals.totalProfit / reportTotals.totalSales) * 100).toFixed(1) : 0}% Margin
+                                    </Badge>
+                                </div>
+                            </div>
+                            <CardContent className="pt-6">
+                                <div className="space-y-6">
+                                    <div className="flex justify-between items-center py-2 border-b">
+                                        <span className="text-muted-foreground">Gross Revenue</span>
+                                        <span className="font-bold">${reportTotals.totalSales.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-2 border-b">
+                                        <span className="text-muted-foreground">Total Discounts</span>
+                                        <span className="font-bold text-red-500">-${sales.reduce((sum, s) => sum + (s.discount || 0), 0).toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-2 border-b">
+                                        <span className="text-muted-foreground">Expense Total</span>
+                                        <span className="font-bold text-red-500">-${expenses.reduce((sum, e) => sum + e.amount, 0).toFixed(2)}</span>
+                                    </div>
+                                    <div className="p-4 bg-muted/30 rounded-lg">
+                                        <p className="text-xs text-muted-foreground italic">
+                                            * Profit is calculated based on Cost of Goods Sold (COGS) at the time of transaction.
+                                        </p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                  </Tabs>
                 </div>
               )}
 
