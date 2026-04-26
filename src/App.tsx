@@ -193,6 +193,7 @@ interface Sale {
   dueAmount: number;
   timestamp: any;
   sellerId: string;
+  sellerName?: string;
 }
 
 interface PurchaseItem {
@@ -434,6 +435,7 @@ export default function App() {
   const [reportDateFrom, setReportDateFrom] = useState('');
   const [reportDateTo, setReportDateTo] = useState('');
   const [reportCategory, setReportCategory] = useState('All');
+  const [reportSeller, setReportSeller] = useState('All');
 
   // Stock Adjustment State
   const [adjMedicineId, setAdjMedicineId] = useState("");
@@ -890,7 +892,8 @@ export default function App() {
         customerPhone,
         customerName: posCustomerName,
         timestamp: serverTimestamp(),
-        sellerId: user?.uid
+        sellerId: user?.uid,
+        sellerName: profile?.name || user?.displayName || user?.email || 'Unknown'
       };
       
       const docRef = await addDoc(collection(db, 'sales'), { ...saleData, id: '' });
@@ -1166,11 +1169,14 @@ export default function App() {
 
   const reportTotals = useMemo(() => {
     const filteredReportSales = sales.filter(sale => {
-      if (!reportDateFrom && !reportDateTo) return true;
-      const saleDate = sale.timestamp?.toDate ? sale.timestamp.toDate() : new Date();
-      if (reportDateFrom && saleDate < new Date(reportDateFrom)) return false;
-      if (reportDateTo && saleDate > new Date(reportDateTo)) return false;
-      return true;
+      const dateMatch = (!reportDateFrom && !reportDateTo) || (() => {
+        const saleDate = sale.timestamp?.toDate ? sale.timestamp.toDate() : new Date();
+        if (reportDateFrom && saleDate < new Date(reportDateFrom)) return false;
+        if (reportDateTo && saleDate > new Date(reportDateTo)) return false;
+        return true;
+      })();
+      const sellerMatch = reportSeller === 'All' || sale.sellerId === reportSeller || (sale.sellerName && sale.sellerName.toLowerCase().includes(reportSeller.toLowerCase()));
+      return dateMatch && sellerMatch;
     });
 
     const totalSales = filteredReportSales.reduce((sum, s) => sum + s.finalAmount, 0);
@@ -2194,7 +2200,7 @@ export default function App() {
                             <TableRow key={sale.id}>
                               <TableCell>{sale.timestamp ? format(sale.timestamp.toDate(), 'MMM dd, HH:mm') : '...'}</TableCell>
                               <TableCell className="text-sm font-medium">
-                                {users.find(u => u.uid === sale.sellerId)?.name || 'Unknown'}
+                                {sale.sellerName || users.find(u => u.uid === sale.sellerId)?.name || 'Unknown'}
                               </TableCell>
                               <TableCell>{sale.items.length} items</TableCell>
                               <TableCell>
@@ -2774,6 +2780,7 @@ export default function App() {
                         <TableRow>
                           <TableHead>Date</TableHead>
                           <TableHead>Type</TableHead>
+                          <TableHead>Seller</TableHead>
                           <TableHead>Description</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
                         </TableRow>
@@ -2786,6 +2793,9 @@ export default function App() {
                               <Badge variant={t.type === 'Income' ? 'default' : 'destructive'} className="text-[10px] uppercase">
                                 {t.type}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm font-medium">
+                              {(t as any).sellerName || (users.find(u => u.uid === (t as any).sellerId)?.name) || 'N/A'}
                             </TableCell>
                             <TableCell className="text-sm">{t.desc}</TableCell>
                             <TableCell className={`text-right font-bold ${t.type === 'Income' ? 'text-green-600' : 'text-red-600'}`}>
@@ -3008,9 +3018,23 @@ export default function App() {
                           onChange={(e) => setReportDateTo(e.target.value)}
                         />
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => { setReportDateFrom(''); setReportDateTo(''); }}>
+                      <Button variant="outline" size="sm" onClick={() => { setReportDateFrom(''); setReportDateTo(''); setReportSeller('All'); }}>
                         Reset
                       </Button>
+                      <div className="flex items-center gap-2 bg-white border rounded-md px-3 py-1 shadow-sm">
+                        <Label className="text-xs font-semibold whitespace-nowrap">Seller:</Label>
+                        <Select value={reportSeller} onValueChange={setReportSeller}>
+                          <SelectTrigger className="border-none h-7 p-0 focus:ring-0 text-xs w-32 shadow-none">
+                            <SelectValue placeholder="All Sellers" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="All">All Sellers</SelectItem>
+                            {users.map(u => (
+                              <SelectItem key={u.uid} value={u.uid}>{u.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <Button size="sm" className="gap-2" onClick={() => window.print()}>
                         <Printer className="w-4 h-4" /> Export PDF
                       </Button>
@@ -3129,6 +3153,7 @@ export default function App() {
                                 <TableRow>
                                   <TableHead>Invoice</TableHead>
                                   <TableHead>Date</TableHead>
+                                  <TableHead>Seller</TableHead>
                                   <TableHead>Customer</TableHead>
                                   <TableHead>Total</TableHead>
                                   <TableHead>Profit</TableHead>
@@ -3142,6 +3167,7 @@ export default function App() {
                                     <TableRow key={sale.id}>
                                       <TableCell className="font-mono text-xs">#{sale.id.slice(-6)}</TableCell>
                                       <TableCell className="text-xs">{sale.timestamp?.toDate ? format(sale.timestamp.toDate(), 'PP') : 'N/A'}</TableCell>
+                                      <TableCell className="text-xs font-medium">{sale.sellerName || users.find(u => u.uid === sale.sellerId)?.name || 'N/A'}</TableCell>
                                       <TableCell className="text-xs">{sale.customerName || 'Guest'}</TableCell>
                                       <TableCell className="text-xs font-bold">${sale.finalAmount.toFixed(2)}</TableCell>
                                       <TableCell className="text-xs font-medium text-green-600">${saleProfit.toFixed(2)}</TableCell>
