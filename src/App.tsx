@@ -276,15 +276,15 @@ const SidebarItem = ({ icon: Icon, label, active, onClick }: { icon: any, label:
 );
 
 const NavigationContent = ({ activeTab, setActiveTab, profile, user, handleLogout, pharmacyInfo }: any) => (
-  <div className="flex flex-col h-full">
-    <div className="p-6 flex items-center gap-3 border-b md:hidden">
+  <div className="flex flex-col h-full bg-white">
+    <div className="p-6 flex items-center gap-3 border-b shrink-0">
       <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
         <ShoppingCart className="w-5 h-5 text-white" />
       </div>
       <h1 className="text-xl font-bold tracking-tight">{pharmacyInfo?.name || 'PharmaFlow'}</h1>
     </div>
     
-    <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+    <nav className="flex-1 p-4 space-y-2 overflow-y-auto min-h-0 scrollbar-hide">
       <SidebarItem icon={LayoutDashboard} label="Home" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
       
       <div className="pt-4 pb-2 px-2 text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Sales</div>
@@ -1368,13 +1368,7 @@ export default function App() {
         </header>
 
         {/* Sidebar (Desktop) */}
-        <aside className="w-64 bg-white border-r hidden md:flex flex-col sticky top-0 h-screen">
-          <div className="p-6 flex items-center gap-3 border-b">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <ShoppingCart className="w-5 h-5 text-white" />
-            </div>
-            <h1 className="text-xl font-bold tracking-tight">{pharmacyInfo?.name || 'PharmaFlow'}</h1>
-          </div>
+        <aside className="w-64 bg-white border-r hidden md:flex flex-col sticky top-0 h-screen overflow-hidden">
           <NavigationContent 
             activeTab={activeTab} 
             setActiveTab={setActiveTab} 
